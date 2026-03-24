@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="public/logo.png" alt="jit ppt Logo" width="80" />
+<img src="frontend/public/logo.png" alt="jit ppt Logo" width="80" />
 
 # AIPPT
 
@@ -12,7 +12,7 @@
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](CONTRIBUTING.md)
 
-[🚀 Live Demo](https://ppt.jitword.com/jit-slide) · [📖 Docs](tech/) · [🐛 Issues](issues) · [💬 Discussions](discussions) · [🇨🇳 中文文档](README.zh-CN.md)
+[🚀 Live Demo](https://ppt.jitword.com/jit-slide) · [📖 Docs](frontend/tech/) · [🐛 Issues](issues) · [💬 Discussions](discussions) · [🇨🇳 中文文档](README.frontend.zh-CN.md)
 
 </div>
 
