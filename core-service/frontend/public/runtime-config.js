@@ -6,16 +6,16 @@
 // ============================================================
 window.__APP_CONFIG__ = {
   // ── AI 大模型 API 密钥 ──────────────────────────────────────────────────
-  VITE_DEEPSEEK_API_KEY: '',
-  VITE_MINIMAX_API_KEY: '',
-  VITE_KIMI_API_KEY: '',
-  VITE_GLM_API_KEY: '',
-  VITE_QWEN_API_KEY: '',
-  VITE_DOUBAO_API_KEY: '',
-  VITE_OPENAI_API_KEY: '',
-  VITE_CLAUDE_API_KEY: '',
-  VITE_GEMINI_API_KEY: '',
-  VITE_GROK_API_KEY: '',
+  APP_DEEPSEEK_API_KEY: '',
+  APP_MINIMAX_API_KEY: '',
+  APP_KIMI_API_KEY: '',
+  APP_GLM_API_KEY: '',
+  APP_QWEN_API_KEY: '',
+  APP_DOUBAO_API_KEY: '',
+  APP_OPENAI_API_KEY: '',
+  APP_CLAUDE_API_KEY: '',
+  APP_GEMINI_API_KEY: '',
+  APP_GROK_API_KEY: '',
 
   // ── AI 大模型 Base URL（不填则使用各厂商官方地址）──────────────────────
   // 使用中转/代理服务时填写，例如：https://relay.example.com/v1
@@ -33,15 +33,15 @@ window.__APP_CONFIG__ = {
 
   // ── 主项目 AiPPT 接口配置 ───────────────────────────────────────────────
   VITE_PPT_BASE_URL: '',
-  VITE_PPT_API_KEY: '',
+  APP_PPT_API_KEY: '',
   VITE_PPT_API_PREFIX: '',
   VITE_PPT_GEN_API_PREFIX: '',
 
   // ── 图片搜索 API 密钥 ──────────────────────────────────────────────────
-  VITE_GIPHY_API_KEY: '',
-  VITE_PEXELS_API_KEY: '',
-  VITE_UNSPLASH_ACCESS_KEY: '',
-  VITE_PIXABAY_API_KEY: '',
+  APP_GIPHY_API_KEY: '',
+  APP_PEXELS_API_KEY: '',
+  APP_UNSPLASH_ACCESS_KEY: '',
+  APP_PIXABAY_API_KEY: '',
 
   // ── GitHub OAuth ───────────────────────────────────────────────────────
   VITE_GITHUB_CLIENT_ID: '',

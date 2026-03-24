@@ -71,33 +71,35 @@ import { checkAIConfig } from '@/utils/ai/setup'
 checkAIConfig()
 ```
 
-### Option 2: Environment Variable
+### Option 2: Runtime Config (Recommended for Browser Keys)
 
-Add to `.env` file:
+Set keys in `frontend/public/runtime-config.js`:
 
-```bash
-# DeepSeek API Key (for main slide generation)
-VITE_DEEPSEEK_API_KEY=sk-your-deepseek-key-here
+```javascript
+window.__APP_CONFIG__ = {
+  // DeepSeek API Key (for main slide generation)
+  APP_DEEPSEEK_API_KEY: 'sk-your-deepseek-key-here',
 
-# MiniMax API Key (for real-time chat interactions)
-VITE_MINIMAX_API_KEY=your-minimax-key-here
+  // MiniMax API Key (for real-time chat interactions)
+  APP_MINIMAX_API_KEY: 'your-minimax-key-here',
 
-# Other supported providers
-VITE_KIMI_API_KEY=your-kimi-key-here
-VITE_GLM_API_KEY=your-glm-key-here
-VITE_QWEN_API_KEY=your-qwen-key-here
-VITE_DOUBAO_API_KEY=your-doubao-key-here
-VITE_OPENAI_API_KEY=sk-your-openai-key-here
-VITE_CLAUDE_API_KEY=sk-ant-your-claude-key-here
-VITE_GEMINI_API_KEY=your-gemini-key-here
-VITE_GROK_API_KEY=xai-your-grok-key-here
+  // Other supported providers
+  APP_KIMI_API_KEY: 'your-kimi-key-here',
+  APP_GLM_API_KEY: 'your-glm-key-here',
+  APP_QWEN_API_KEY: 'your-qwen-key-here',
+  APP_DOUBAO_API_KEY: 'your-doubao-key-here',
+  APP_OPENAI_API_KEY: 'sk-your-openai-key-here',
+  APP_CLAUDE_API_KEY: 'sk-ant-your-claude-key-here',
+  APP_GEMINI_API_KEY: 'your-gemini-key-here',
+  APP_GROK_API_KEY: 'xai-your-grok-key-here',
+}
 ```
 
 The system will automatically use provider-specific keys as fallback.
 
 **Priority Order**:
 1. Provider-specific API key in localStorage settings
-2. Environment variable (`VITE_{PROVIDER}_API_KEY`)
+2. Runtime config (`window.__APP_CONFIG__.APP_{PROVIDER}_API_KEY`)
 3. Generic `apiKey` field (backward compatibility)
 
 ### Option 3: Programmatic Setup
@@ -272,17 +274,17 @@ streamGenerate(
 
 ### Storage Location
 - **LocalStorage**: `pxdoc_ai_settings` (supports multiple provider keys)
-- **Environment Variables**: 
-  - `VITE_DEEPSEEK_API_KEY` - For DeepSeek models
-  - `VITE_MINIMAX_API_KEY` - For MiniMax models
-  - `VITE_KIMI_API_KEY`, `VITE_GLM_API_KEY`, etc. - For other providers
+- **Runtime Config** (`window.__APP_CONFIG__`):
+  - `APP_DEEPSEEK_API_KEY` - For DeepSeek models
+  - `APP_MINIMAX_API_KEY` - For MiniMax models
+  - `APP_KIMI_API_KEY`, `APP_GLM_API_KEY`, etc. - For other providers
 
 ### API Key Resolution Priority
 
 When the system needs to call an AI provider, it resolves the API key in this order:
 
 1. **Provider-specific key in settings** - `settings.apiKeys[provider]`
-2. **Environment variable** - `VITE_{PROVIDER}_API_KEY`
+2. **Runtime config** - `APP_{PROVIDER}_API_KEY`
 3. **Generic apiKey field** - `settings.apiKey` (backward compatibility)
 
 **Example**: When ChatPanel forces MiniMax:
@@ -295,7 +297,7 @@ streamGenerate(userInput, systemPrompt, handlers, undefined, {
 
 // System resolves API key:
 // 1. Check settings.apiKeys.minimax
-// 2. Check import.meta.env.VITE_MINIMAX_API_KEY
+// 2. Check getRuntimeConfig('APP_MINIMAX_API_KEY')
 // 3. Fallback to settings.apiKey (if configured for minimax)
 ```
 
@@ -351,10 +353,10 @@ DeepSeek Key: ✓ Configured
 MiniMax Key: ✓ Configured
 ```
 
-**Verify Environment Variables** (in Vite dev server):
+**Verify Runtime Config** (in browser console):
 ```javascript
-console.log('DeepSeek Env:', import.meta.env.VITE_DEEPSEEK_API_KEY ? '✓ Set' : '✗ Not set')
-console.log('MiniMax Env:', import.meta.env.VITE_MINIMAX_API_KEY ? '✓ Set' : '✗ Not set')
+console.log('DeepSeek Config:', window.__APP_CONFIG__?.APP_DEEPSEEK_API_KEY ? '✓ Set' : '✗ Not set')
+console.log('MiniMax Config:', window.__APP_CONFIG__?.APP_MINIMAX_API_KEY ? '✓ Set' : '✗ Not set')
 ```
 ```
 

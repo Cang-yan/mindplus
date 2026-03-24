@@ -162,9 +162,6 @@ export default defineConfig(({ mode }) => {
       // 图片服务配置
         IMAGE_SERVICE_URL: image_service_url,
         IMAGE_PROXY_ENABLED: env.IMAGE_PROXY_ENABLED || 'auto',
-         // AI服务配置
-        VITE_DEEPSEEK_API_KEY: process.env.VITE_DEEPSEEK_API_KEY || '',
-        VITE_MINIMAX_API_KEY: process.env.VITE_MINIMAX_API_KEY || '',
       },
     },
     base: appBase,

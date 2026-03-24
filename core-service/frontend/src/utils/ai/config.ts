@@ -24,18 +24,18 @@ const DEFAULTS: AISettings = {
   baseUrls: {},
 }
 
-/** 各 provider 对应的运行时 API Key 配置键名 */
+/** 各 provider 对应的运行时 API Key 配置键名（不使用 VITE_*，避免构建注入） */
 const PROVIDER_ENV_KEY: Partial<Record<ProviderKey, string>> = {
-  deepseek: 'VITE_DEEPSEEK_API_KEY',
-  minimax:  'VITE_MINIMAX_API_KEY',
-  kimi:     'VITE_KIMI_API_KEY',
-  glm:      'VITE_GLM_API_KEY',
-  qwen:     'VITE_QWEN_API_KEY',
-  doubao:   'VITE_DOUBAO_API_KEY',
-  openai:   'VITE_OPENAI_API_KEY',
-  claude:   'VITE_CLAUDE_API_KEY',
-  gemini:   'VITE_GEMINI_API_KEY',
-  grok:     'VITE_GROK_API_KEY',
+  deepseek: 'APP_DEEPSEEK_API_KEY',
+  minimax:  'APP_MINIMAX_API_KEY',
+  kimi:     'APP_KIMI_API_KEY',
+  glm:      'APP_GLM_API_KEY',
+  qwen:     'APP_QWEN_API_KEY',
+  doubao:   'APP_DOUBAO_API_KEY',
+  openai:   'APP_OPENAI_API_KEY',
+  claude:   'APP_CLAUDE_API_KEY',
+  gemini:   'APP_GEMINI_API_KEY',
+  grok:     'APP_GROK_API_KEY',
 }
 
 /** 各 provider 对应的运行时 Base URL 配置键名 */

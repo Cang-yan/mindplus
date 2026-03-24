@@ -7,7 +7,7 @@ import { getRuntimeConfig } from '../runtimeConfig'
 
 // ===== GIPHY API =====
 export class GiphyService {
-  constructor(apiKey = getRuntimeConfig('VITE_GIPHY_API_KEY') || 'YOUR_GIPHY_KEY') {
+  constructor(apiKey = getRuntimeConfig('APP_GIPHY_API_KEY') || 'YOUR_GIPHY_KEY') {
     this.apiKey = apiKey
     this.baseUrl = 'https://api.giphy.com/v1/gifs'
   }
@@ -59,7 +59,7 @@ export class GiphyService {
 
 // ===== PEXELS API =====
 export class PexelsService {
-  constructor(apiKey = getRuntimeConfig('VITE_PEXELS_API_KEY') || 'YOUR_PEXELS_KEY') {
+  constructor(apiKey = getRuntimeConfig('APP_PEXELS_API_KEY') || 'YOUR_PEXELS_KEY') {
     this.apiKey = apiKey
     this.baseUrl = 'https://api.pexels.com/v1'
   }
@@ -122,7 +122,7 @@ export class PexelsService {
 
 // ===== UNSPLASH API =====
 export class UnsplashService {
-  constructor(accessKey = getRuntimeConfig('VITE_UNSPLASH_ACCESS_KEY') || 'YOUR_UNSPLASH_KEY') {
+  constructor(accessKey = getRuntimeConfig('APP_UNSPLASH_ACCESS_KEY') || 'YOUR_UNSPLASH_KEY') {
     this.accessKey = accessKey
     this.baseUrl = 'https://api.unsplash.com'
   }
@@ -189,7 +189,7 @@ export class UnsplashService {
 
 // ===== PIXABAY API (Alternative Free Service) =====
 export class PixabayService {
-  constructor(apiKey = getRuntimeConfig('VITE_PIXABAY_API_KEY') || 'YOUR_PIXABAY_KEY') {
+  constructor(apiKey = getRuntimeConfig('APP_PIXABAY_API_KEY') || 'YOUR_PIXABAY_KEY') {
     this.apiKey = apiKey
     this.baseUrl = 'https://pixabay.com/api'
   }

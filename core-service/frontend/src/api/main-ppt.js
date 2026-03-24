@@ -2,6 +2,8 @@ import { getRuntimeConfig } from '@/utils/runtimeConfig'
 
 const DEFAULT_API_PREFIX = '/docmee/v1/api/ppt'
 const DEFAULT_PPT_GEN_PREFIX = '/docmee/v1/api/pptjson'
+const PROXY_API_PREFIX = '/api/aippt/proxy/ppt'
+const PROXY_PPT_GEN_PREFIX = '/api/aippt/proxy/pptjson'
 const DOWNLOAD_PPTX_SUFFIX_RE = /\/downloadpptx\/?$/i
 const JSON2PPT_SUFFIX_RE = /\/json2ppt\/?$/i
 
@@ -32,7 +34,43 @@ function appendQuery(url, query) {
   return `${url}?${text}`
 }
 
+function parseBooleanSwitch(raw, fallback = false) {
+  if (raw === undefined || raw === null || raw === '') return fallback
+  const text = String(raw).trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(text)) return true
+  if (['0', 'false', 'no', 'off'].includes(text)) return false
+  return fallback
+}
+
+function resolvePptProxyMode() {
+  try {
+    const g = globalThis
+    const directModeRaw =
+      getRuntimeConfig('VITE_PPT_DIRECT_MODE') ||
+      import.meta.env.VITE_PPT_DIRECT_MODE
+    const forceProxyRaw =
+      (g && g.__PX_FORCE_VITE_PROXY__) ||
+      (typeof localStorage !== 'undefined' ? localStorage.getItem('px_force_vite_proxy') : '') ||
+      getRuntimeConfig('VITE_PPT_FORCE_PROXY') ||
+      import.meta.env.VITE_PPT_FORCE_PROXY
+    const directMode = parseBooleanSwitch(directModeRaw, false)
+    const forceProxy = parseBooleanSwitch(forceProxyRaw, true)
+    return !directMode && forceProxy
+  } catch {
+    return true
+  }
+}
+
+function resolveJwtToken() {
+  try {
+    return String(localStorage.getItem('jwt_token') || '').trim()
+  } catch {
+    return ''
+  }
+}
+
 export function resolvePptApiConfig() {
+  const useServerProxy = resolvePptProxyMode()
   const baseUrl =
     trimEndSlash(
       getRuntimeConfig('VITE_PPT_BASE_URL') ||
@@ -42,10 +80,8 @@ export function resolvePptApiConfig() {
       ''
     )
   const apiKey =
-    getRuntimeConfig('VITE_PPT_API_KEY') ||
-    getRuntimeConfig('VITE_AIPPT_API_KEY') ||
-    import.meta.env.VITE_PPT_API_KEY ||
-    import.meta.env.VITE_AIPPT_API_KEY ||
+    getRuntimeConfig('APP_PPT_API_KEY') ||
+    getRuntimeConfig('APP_AIPPT_API_KEY') ||
     ''
   const apiPrefix =
     getRuntimeConfig('VITE_PPT_API_PREFIX') ||
@@ -68,12 +104,26 @@ export function resolvePptApiConfig() {
     ? 'downloadPptx'
     : 'json2ppt'
 
+  if (useServerProxy) {
+    return {
+      baseUrl: '',
+      apiKey: '',
+      apiPrefix: PROXY_API_PREFIX,
+      genApiPrefix: PROXY_PPT_GEN_PREFIX,
+      genApiMode,
+      useServerProxy: true,
+      // backward compatible alias
+      pptJsonPrefix: PROXY_PPT_GEN_PREFIX,
+    }
+  }
+
   return {
     baseUrl,
     apiKey: String(apiKey || '').trim(),
     apiPrefix: String(apiPrefix || '').trim() || DEFAULT_API_PREFIX,
     genApiPrefix: normalizedGenApiPrefix,
     genApiMode,
+    useServerProxy: false,
     // backward compatible alias
     pptJsonPrefix: normalizedGenApiPrefix,
   }
@@ -124,7 +174,12 @@ export function getAuthHeaders(extra) {
     'Content-Type': 'application/json',
     ...(extra || {}),
   }
-  if (config.apiKey) {
+  if (config.useServerProxy) {
+    const jwtToken = resolveJwtToken()
+    if (jwtToken) {
+      headers.Authorization = `Bearer ${jwtToken}`
+    }
+  } else if (config.apiKey) {
     headers.Authorization = `Bearer ${config.apiKey}`
   }
   Object.keys(headers).forEach(key => {

@@ -27,7 +27,7 @@ export class ImageGenerationSkill implements Skill {
 
   constructor() {
     // 从运行时配置读取（优先 window.__APP_CONFIG__，回退到 Vite env）
-    this.apiKey = getRuntimeConfig('VITE_MINIMAX_API_KEY')
+    this.apiKey = getRuntimeConfig('APP_MINIMAX_API_KEY')
     // 支持通过 VITE_MINIMAX_BASE_URL 覆盖为中转地址，默认使用官方地址
     const baseUrl = getRuntimeConfig('VITE_MINIMAX_BASE_URL') || 'https://api.minimaxi.com/v1'
     this.endpoint = baseUrl.replace(/\/$/, '') + '/image_generation'
@@ -37,7 +37,7 @@ export class ImageGenerationSkill implements Skill {
     if (!this.apiKey) {
       return {
         success: false,
-        error: '未配置 MiniMax API。请在 .env.local 中设置 VITE_MINIMAX_API_KEY'
+        error: '未配置 MiniMax API。请在 runtime-config.js 中设置 APP_MINIMAX_API_KEY'
       }
     }
 

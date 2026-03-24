@@ -49,6 +49,14 @@ function parseStringList(value, fallback = []) {
     .filter(Boolean)
 }
 
+function normalizePathPrefix(value, fallback) {
+  const raw = String(value || fallback || '').trim()
+  if (!raw) return fallback
+  const normalized = raw.replace(/\/+$/, '')
+  if (!normalized) return fallback
+  return normalized.startsWith('/') ? normalized : `/${normalized}`
+}
+
 module.exports = {
   // 后端 API 服务端口（默认 3001）
   port: parseInt(process.env.VITE_BACKEND_PORT || process.env.PORT || process.env.AIPPT_BACKEND_PORT || '3001', 10),
@@ -128,6 +136,40 @@ module.exports = {
     workflowPptId: process.env.COZE_WORKFLOW_PPT_ID || '',
   },
 
+  // AiPPT upstream proxy (server-only secret preferred)
+  aippt: {
+    baseUrl: String(
+      process.env.AIPPT_BASE_URL ||
+      process.env.PPT_BASE_URL ||
+      process.env.VITE_PPT_BASE_URL ||
+      process.env.VITE_AIPPT_BASE_URL ||
+      ''
+    ).trim(),
+    apiKey: String(
+      process.env.AIPPT_API_KEY ||
+      process.env.PPT_API_KEY ||
+      ''
+    ).trim(),
+    apiPrefix: normalizePathPrefix(
+      process.env.AIPPT_API_PREFIX ||
+      process.env.PPT_API_PREFIX ||
+      process.env.VITE_PPT_API_PREFIX ||
+      process.env.VITE_AIPPT_API_PREFIX,
+      '/docmee/v1/api/ppt'
+    ),
+    genApiPrefix: normalizePathPrefix(
+      process.env.AIPPT_PPT_JSON_API_PREFIX ||
+      process.env.PPT_JSON_API_PREFIX ||
+      process.env.AIPPT_GEN_API_PREFIX ||
+      process.env.PPT_GEN_API_PREFIX ||
+      process.env.VITE_PPT_GEN_API_PREFIX ||
+      process.env.VITE_AIPPT_PPT_GEN_API_PREFIX ||
+      process.env.VITE_PPT_JSON_API_PREFIX ||
+      process.env.VITE_AIPPT_PPT_JSON_API_PREFIX,
+      '/docmee/v1/api/pptjson'
+    ),
+  },
+
   // OpenAI-compatible AI proxy (for /ai/trial/stream)
   ai: {
     // 与前端统一：复用 VITE_OPENAI_BASE_URL，未配置时走官方地址
@@ -163,23 +205,22 @@ module.exports = {
   // 文献翻译专用 OpenAI 兼容配置（按用户要求走 VITE_FY_*）
   literatureTranslate: {
     baseUrl: String(
-      process.env.VITE_FY_BASE_URL ||
       process.env.LITERATURE_TRANSLATE_BASE_URL ||
+      process.env.VITE_FY_BASE_URL ||
       'https://api.openai.com/v1'
     ).trim(),
     apiKey: String(
-      process.env.VITE_FY_API_KEY ||
       process.env.LITERATURE_TRANSLATE_API_KEY ||
       ''
     ).trim(),
     model: String(
-      process.env.VITE_FY_MODEL ||
       process.env.LITERATURE_TRANSLATE_MODEL ||
+      process.env.VITE_FY_MODEL ||
       'deepl-en'
     ).trim() || 'deepl-en',
     fallbackModels: parseStringList(
-      process.env.VITE_FY_FALLBACK_MODELS ||
       process.env.LITERATURE_TRANSLATE_FALLBACK_MODELS ||
+      process.env.VITE_FY_FALLBACK_MODELS ||
       'gpt-4o-mini,gpt-4.1-mini,deepseek-chat'
     ),
   },

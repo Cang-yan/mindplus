@@ -883,7 +883,7 @@ module.exports = async function literatureRoutes(fastify) {
     const translateBaseUrl = String(config.literatureTranslate?.baseUrl || '').trim()
     const translateApiKey = String(config.literatureTranslate?.apiKey || '').trim()
     if (!translateApiKey) {
-      return reply.code(501).send({ error: '翻译服务未配置，请在 .env 中设置 VITE_FY_API_KEY' })
+      return reply.code(501).send({ error: '翻译服务未配置，请在 .env 中设置 LITERATURE_TRANSLATE_API_KEY' })
     }
     if (!translateBaseUrl) {
       return reply.code(501).send({ error: '翻译服务未配置，请在 .env 中设置 VITE_FY_BASE_URL' })

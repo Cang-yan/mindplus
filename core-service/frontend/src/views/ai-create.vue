@@ -881,8 +881,8 @@ async function hydrateFromRecord(recordId) {
 
 onMounted(async () => {
   const config = resolvePptApiConfig()
-  if (import.meta.env.DEV && !config.apiKey) {
-    console.warn('[ai-create] VITE_PPT_API_KEY 未配置，AiPPT 相关请求可能失败')
+  if (import.meta.env.DEV && !config.useServerProxy && !config.apiKey) {
+    console.warn('[ai-create] APP_PPT_API_KEY 未配置（或未启用后端代理），AiPPT 相关请求可能失败')
   }
 
   refreshGenerationRecords()

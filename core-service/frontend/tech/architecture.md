@@ -222,7 +222,7 @@ analyzeTaskType(prompt, context)
 
 ```
 1. settings.apiKeys[provider]  ← 用户在设置面板配置的 Provider 专用 Key
-2. import.meta.env.VITE_XXX_API_KEY  ← 环境变量（部署时配置）
+2. window.__APP_CONFIG__.APP_XXX_API_KEY  ← 运行时配置（runtime-config.js）
 3. settings.apiKey  ← 旧版通用 Key（向后兼容）
 4. 无 Key → 后端 trial 兜底
 ```
@@ -642,8 +642,8 @@ mynewprovider: {
 ```
 
 2. 在 `ProviderKey` 类型联合中添加 `'mynewprovider'`
-3. 在 `.env.example` 中添加 `VITE_MYNEWPROVIDER_API_KEY=`
-4. 在 `getEnvKeyForProvider` 映射中添加对应条目
+3. 在 `frontend/public/runtime-config.js` 中添加 `APP_MYNEWPROVIDER_API_KEY: ''`
+4. 在 `PROVIDER_ENV_KEY` 映射中添加对应条目
 
 完成！无需修改其他代码。
 

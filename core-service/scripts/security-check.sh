@@ -36,16 +36,16 @@ LEGACY_CONFIG_HITS="$(git grep -nE "apiKey:\s*'[^']+'" -- \
   frontend/slide/legacy-static/runtime-config.js || true)"
 report_hits "Legacy runtime-config.js must keep apiKey empty." "$LEGACY_CONFIG_HITS"
 
-# 3) Vue runtime config placeholders must keep API key fields empty.
-APP_CONFIG_HITS="$(git grep -nE "VITE_[A-Z0-9_]*API_KEY:\s*'[^']+'" -- \
+# 3) Vue runtime config placeholders must keep key fields empty.
+APP_CONFIG_HITS="$(git grep -nE "(VITE|APP)_[A-Z0-9_]*(API_KEY|ACCESS_KEY|SECRET_KEY):\s*'[^']+'" -- \
   frontend/public/runtime-config.js \
   frontend/slide/runtime-config.js || true)"
-report_hits "frontend runtime-config.js must keep VITE_*_API_KEY empty." "$APP_CONFIG_HITS"
+report_hits "frontend runtime-config.js must keep *_KEY placeholders empty." "$APP_CONFIG_HITS"
 
-# 4) Built runtimeConfig assets must not embed concrete API keys.
-ASSET_CONFIG_HITS="$(git grep -nE "VITE_[A-Z0-9_]*API_KEY:\"[^\"]+\"" -- \
+# 4) Built runtimeConfig assets must not embed concrete key values.
+ASSET_CONFIG_HITS="$(git grep -nE "(VITE|APP)_[A-Z0-9_]*(API_KEY|ACCESS_KEY|SECRET_KEY):\"[^\"]+\"" -- \
   frontend/slide/assets/runtimeConfig-*.js || true)"
-report_hits "Built runtimeConfig assets must not embed concrete API keys." "$ASSET_CONFIG_HITS"
+report_hits "Built runtimeConfig assets must not embed concrete key values." "$ASSET_CONFIG_HITS"
 
 if [[ "$EXIT_CODE" -ne 0 ]]; then
   echo "[security-check] FAILED"
