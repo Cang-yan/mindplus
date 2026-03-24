@@ -294,9 +294,9 @@ export default defineConfig(({ mode }) => {
     css: {
       preprocessorOptions: {
         scss: {
-          sassOptions: {
-            outputStyle: 'compressed',
-          },
+          // Use Dart Sass modern API to avoid legacy-js-api deprecation warnings.
+          api: 'modern-compiler',
+          style: 'compressed',
         },
       },
     },

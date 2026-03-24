@@ -75,3 +75,4 @@ frontend/public/template_pic/*
 !frontend/public/template_pic/.gitkeep
 !frontend/public/template_pic/README.md
 frontend/slide/template_pic/
+frontend/slide/
