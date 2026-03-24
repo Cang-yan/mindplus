@@ -77,6 +77,14 @@ deactivate
 
 如果你已有线上服务名，建议继续沿用现有名字，减少改动成本。
 
+先创建统一日志目录（本文档示例统一写入这里）：
+
+```bash
+mkdir -p /home/xx/log/minplus
+chown -R xx:xx /home/xx/log/minplus
+chmod 755 /home/xx/log/minplus
+```
+
 #### 2.4.1 `aippt-server`（core-service 后端）
 
 文件：`/etc/systemd/system/aippt-server.service`
@@ -94,6 +102,8 @@ WorkingDirectory=/home/xx/LINGINE/mindplus/core-service
 Environment=NODE_ENV=production
 Environment=AIPPT_ENV_FILE=/home/xx/LINGINE/mindplus/core-service/.env
 ExecStart=/usr/bin/npm run frontend:server:start
+StandardOutput=append:/home/xx/log/minplus/aippt-server.log
+StandardError=append:/home/xx/log/minplus/aippt-server.log
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -117,6 +127,8 @@ User=xx
 WorkingDirectory=/home/xx/LINGINE/mindplus/opendraft-project
 EnvironmentFile=/home/xx/LINGINE/mindplus/opendraft-project/.env
 ExecStart=/home/xx/LINGINE/mindplus/opendraft-project/.venv/bin/python app.py
+StandardOutput=append:/home/xx/log/minplus/opendraft.log
+StandardError=append:/home/xx/log/minplus/opendraft.log
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -144,6 +156,8 @@ WorkingDirectory=/home/xx/LINGINE/minduser
 Environment=NODE_ENV=production
 EnvironmentFile=/home/xx/LINGINE/minduser/.env
 ExecStart=/usr/bin/npm start
+StandardOutput=append:/home/xx/log/minplus/minduser.log
+StandardError=append:/home/xx/log/minplus/minduser.log
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -305,6 +319,16 @@ journalctl -u aippt-server -n 200 --no-pager
 journalctl -u opendraft -n 200 --no-pager
 
 ss -ltnp | rg ':3001|:18080|:80'
+```
+
+文件日志查看（按本文 `systemd` 配置）：
+
+```bash
+tail -f /home/xx/log/minplus/aippt-server.log
+tail -f /home/xx/log/minplus/opendraft.log
+
+# 若同机部署 MindUser：
+# tail -f /home/xx/log/minplus/minduser.log
 ```
 
 可选一键检查：
