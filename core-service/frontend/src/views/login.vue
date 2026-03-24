@@ -706,8 +706,8 @@ const handleBackToRegister = () => {
 }
 
 // Demo account quick login
-const DEMO_ACCOUNT = getRuntimeConfig('VITE_DEMO_ACCOUNT') || 'demo@aippt.cc'
-const DEMO_PASSWORD = getRuntimeConfig('VITE_DEMO_PASSWORD') || 'demo123456'
+const DEMO_ACCOUNT = 'demo@aippt.cc'
+const DEMO_PASSWORD = 'demo123456'
 
 const handleDemoLogin = async () => {
   if (demoLoading.value) return

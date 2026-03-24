@@ -1,6 +1,7 @@
 // ============================================================
 // 运行时配置占位文件
-// 此文件会在部署时被 tools/generate-runtime-config.sh 覆盖。
+// 可按需手动维护 window.__APP_CONFIG__ 覆盖项；
+// 若保持为空，前端会回退到 Vite 构建时环境变量（import.meta.env）。
 // 请勿在此处填写真实密钥，也请勿将真实密钥提交到版本控制系统。
 // ============================================================
 window.__APP_CONFIG__ = {
@@ -50,8 +51,4 @@ window.__APP_CONFIG__ = {
   VITE_MINDUSER_BASE_URL: '',
   VITE_MINDUSER_SERVICE_KEY: '',
   VITE_MINDUSER_PROFILE_URL: '',
-
-  // ── 演示账户 ───────────────────────────────────────────────────────────
-  VITE_DEMO_ACCOUNT: '',
-  VITE_DEMO_PASSWORD: '',
 }

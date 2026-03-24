@@ -78,8 +78,12 @@ export default defineConfig(({ mode }) => {
     return Number.isFinite(n) && n > 0 ? String(n) : String(fallback)
   }
 
-  const devApiHost = env.VITE_DEV_API_HOST || env.AIPPT_BACKEND_HOST || localIP
-  const devApiPort = normalizePort(env.VITE_DEV_API_PORT || env.AIPPT_BACKEND_PORT || env.PORT, 3001)
+  // Unified backend port for local development (frontend + backend).
+  const devApiHost = env.AIPPT_BACKEND_HOST || env.VITE_DEV_API_HOST || localIP
+  const devApiPort = normalizePort(
+    env.VITE_BACKEND_PORT || env.VITE_DEV_API_PORT || env.AIPPT_BACKEND_PORT || env.PORT,
+    3001
+  )
   // 若未配置协作/信令独立端口，则默认跟随 API 端口，避免对 3002 的硬依赖。
   const devWsHost = env.VITE_DEV_WS_HOST || env.AIPPT_COLLAB_HOST || devApiHost
   const devWsPort = normalizePort(

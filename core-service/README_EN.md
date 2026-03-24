@@ -54,13 +54,12 @@ npm run security:check
 
 ### Frontend runtime config
 
-Frontend reads runtime values from `window.__APP_CONFIG__` (in `frontend/public/runtime-config.js`).
-Generate deployment config with:
+Frontend reads config through `getRuntimeConfig`:
 
-```bash
-cd /home/xx/LINGINE/mindplus/core-service/frontend
-bash tools/generate-runtime-config.sh /your/deploy/dir
-```
+- First from `window.__APP_CONFIG__` (defined in `frontend/public/runtime-config.js`)
+- Falls back to Vite build-time `import.meta.env` when runtime values are empty
+
+`tools/generate-runtime-config.sh` has been removed, so no extra runtime generation step is required.
 
 ### Backend config
 

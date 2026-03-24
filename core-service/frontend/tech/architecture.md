@@ -654,16 +654,10 @@ mynewprovider: {
 3. 在 `src/utils/slide/` 添加渲染逻辑
 4. 在 `useComponentRegistry.js` 中注册
 
-### 12.3 修改 Demo 账号配置
+### 12.3 Demo 模式说明
 
-在 `.env` 文件中：
-
-```env
-VITE_DEMO_ACCOUNT=your-demo@email.com
-VITE_DEMO_PASSWORD=yourpassword
-```
-
-不配置时，Demo 模式为本地 Guest 会话（无需后端）。
+Demo 账号环境变量配置已移除。当前 Demo 入口仅作为体验模式兜底，
+当后端登录不可用时会降级为本地 Guest 会话（无需后端）。
 
 ### 12.4 对接自有后端
 

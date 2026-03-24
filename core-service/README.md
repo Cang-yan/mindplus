@@ -54,12 +54,12 @@ npm run security:check
 
 ### 前端运行时配置
 
-前端使用 `window.__APP_CONFIG__`（由 `frontend/public/runtime-config.js` 注入），部署时可用脚本生成：
+前端统一通过 `getRuntimeConfig` 读取配置：
 
-```bash
-cd /home/xx/LINGINE/mindplus/core-service/frontend
-bash tools/generate-runtime-config.sh /your/deploy/dir
-```
+- 优先读取 `window.__APP_CONFIG__`（来自 `frontend/public/runtime-config.js`）
+- 空值时回退到 Vite 构建时注入的 `import.meta.env`
+
+`tools/generate-runtime-config.sh` 已移除，不再需要额外的运行时生成步骤。
 
 ### 后端配置
 

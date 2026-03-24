@@ -44,6 +44,7 @@ declare module 'vue' {
     ChatPanel: typeof import('./src/components/slide-page/ChatPanel.vue')['default']
     ComingSoonOverlay: typeof import('./src/components/slide-page/ComingSoonOverlay.vue')['default']
     ComponentCard: typeof import('./src/components/slide-page/ComponentCard.vue')['default']
+    copy: typeof import('./src/components/slide-page/floatingToolbar/FloatingTableToolbar copy.vue')['default']
     CreateDocumentDialog: typeof import('./src/components/slide-page/CreateDocumentDialog.vue')['default']
     DeletedPage: typeof import('./src/views/deleted-page.vue')['default']
     DocumentsDrawer: typeof import('./src/components/editor-header/DocumentsDrawer.vue')['default']

@@ -51,7 +51,7 @@ function parseStringList(value, fallback = []) {
 
 module.exports = {
   // 后端 API 服务端口（默认 3001）
-  port: parseInt(process.env.PORT || process.env.AIPPT_BACKEND_PORT || '3001', 10),
+  port: parseInt(process.env.VITE_BACKEND_PORT || process.env.PORT || process.env.AIPPT_BACKEND_PORT || '3001', 10),
   host: process.env.HOST || process.env.AIPPT_BACKEND_BIND_HOST || '0.0.0.0',
   nodeEnv: process.env.SERVER_NODE_ENV || process.env.NODE_ENV || 'production',
 
