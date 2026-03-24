@@ -247,25 +247,26 @@ def _strip_thinking(text: str) -> str:
     return stripped.strip()
 
 
+def refine_chapter_text(text: str) -> str:
+    """Public wrapper for chapter refinement (used by pipelined Phase 3).
+
+    Returns refined text. After calling, check ``_refine_chapter._last_summary``
+    for the refine summary (may be None).
+    """
+    return _strip_thinking(text)
+
+
 def _refine_chapter(text: str) -> str:
     """
-    Combined chapter post-processing via kimi-k2.5:
+    Combined chapter post-processing via Gemini:
     - Strip thinking text
     - Polish grammar and flow
     - Increase natural variation (entropy)
+    - Return a brief change summary for progress display
     One API call replaces three separate steps.
     """
-    import openai
-
     config = get_config()
-    openai_base_url = str(os.getenv("OPENAI_BASE_URL", "") or "").strip()
-    client_kwargs: Dict[str, Any] = {
-        "api_key": config.google_api_key,
-        "timeout": 120,
-    }
-    if openai_base_url:
-        client_kwargs["base_url"] = openai_base_url
-    client = openai.OpenAI(**client_kwargs)
+    model = setup_model()
 
     refine_prompt = f"""You are an expert academic editor. Refine the following chapter by performing these three tasks in a single pass.
 
@@ -284,26 +285,42 @@ Make the prose read like a skilled human researcher wrote it:
 - Eliminate formulaic hedging ("It is worth noting that…", "It should be mentioned that…") — just state the point.
 
 **RULES (non-negotiable)**
-1. Output the refined chapter text ONLY. No preamble, no summary, no commentary.
-2. Preserve every {{cite_XXX}} citation marker exactly.
-3. Preserve all markdown structure: headings, bold, italic, tables, lists.
-4. Keep the original language (Chinese stays Chinese, English stays English).
-5. Do not invent new claims or data — only improve what already exists.
-6. Do not delete headings or restructure sections.
-7. Maintain academic rigor and domain-specific terminology.
-8. The output length should be similar to the input — do not aggressively shorten.
+1. Preserve every {{cite_XXX}} citation marker exactly.
+2. Preserve all markdown structure: headings, bold, italic, tables, lists.
+3. Keep the original language (Chinese stays Chinese, English stays English).
+4. Do not invent new claims or data — only improve what already exists.
+5. Do not delete headings or restructure sections.
+6. Maintain academic rigor and domain-specific terminology.
+7. The output length should be similar to the input — do not aggressively shorten.
+
+**OUTPUT FORMAT:**
+First output the refined chapter text, then at the very end output a brief change summary wrapped in tags like this:
+
+<refine_summary>
+- (2-4 bullet points in the SAME language as the chapter, describing key changes made)
+</refine_summary>
 
 {text}"""
 
-    response = client.chat.completions.create(
-        model="kimi-k2.5",
-        messages=[{"role": "user", "content": refine_prompt}],
-        temperature=0.3,
+    response = model.generate_content(
+        refine_prompt,
+        request_options={"timeout": 180}
     )
-    result = response.choices[0].message.content.strip()
+    raw_result = response.text.strip()
+
+    # Extract refine summary
+    import re
+    summary_match = re.search(r'<refine_summary>(.*?)</refine_summary>', raw_result, re.DOTALL)
+    refine_summary = summary_match.group(1).strip() if summary_match else None
+    # Remove summary tags from the final text
+    result = re.sub(r'\s*<refine_summary>.*?</refine_summary>\s*', '', raw_result, flags=re.DOTALL).strip()
+
     logger.info(f"Refine: input {len(text)} chars -> output {len(result)} chars (ratio: {len(result)/len(text):.2f})")
     if len(result) < len(text) * 0.3:
         logger.warning(f"Refine output too short. First 200 chars: {result[:200]}")
+
+    # Store summary on the function for caller to retrieve
+    _refine_chapter._last_summary = refine_summary
     return result
 
 
@@ -451,7 +468,8 @@ def run_agent(
     max_retries: int = 3,
     skip_validation: bool = False,
     clean_thinking: bool = True,
-    on_status: Optional[Callable[[str], None]] = None
+    on_status: Optional[Callable[[str], None]] = None,
+    defer_refine: bool = False
 ) -> str:
     """
     Run an AI agent with given prompt and input, with optional validation.
@@ -611,7 +629,7 @@ def run_agent(
             logger.info(f"Agent '{name}': LLM generation took {gen_time:.1f}s, output {len(output)} chars")
 
             # Strip AI thinking/reasoning text only for user-visible content
-            if clean_thinking:
+            if clean_thinking and not defer_refine:
                 if on_status:
                     on_status("refining")
                 clean_start = time.time()
@@ -619,6 +637,8 @@ def run_agent(
                 logger.info(f"Agent '{name}': Thinking cleanup took {time.time() - clean_start:.1f}s")
                 if on_status:
                     on_status("refined")
+            elif defer_refine:
+                logger.info(f"Agent '{name}': Refinement deferred (defer_refine=True)")
 
             logger.debug(f"Agent '{name}': Generated {len(output)} chars in {time.time() - start_time:.1f}s")
 
@@ -761,11 +781,11 @@ def rate_limit_delay(seconds: Optional[float] = None) -> None:
         seconds: Manual override (default: None = use tier-adaptive delay)
     """
     if seconds is None:
-        # Use tier-adaptive delay
-        config = get_concurrency_config(verbose=False)
-        seconds = config.rate_limit_delay
+        # Proxy-based setup: no rate limiting needed
+        seconds = 0
 
-    time.sleep(seconds)
+    if seconds > 0:
+        time.sleep(seconds)
 
 
 def research_citations_via_api(
@@ -916,8 +936,12 @@ def research_citations_via_api(
                         f"but need minimum {min_sources_deep}."
                     )
 
-            # Extract queries as research topics
+            # Extract queries as research topics, cap to reasonable amount
             research_topics = research_plan.get('queries', [])
+            # Limit queries to 3x target to avoid excessive API calls
+            max_queries = max(min_sources_deep * 3, 15)
+            if len(research_topics) > max_queries:
+                research_topics = research_topics[:max_queries]
 
             if verbose:
                 safe_print(f"\n✅ Research Plan Created:")

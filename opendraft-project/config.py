@@ -145,6 +145,8 @@ class ModelConfig:
             'gemini-1.5-flash',
             'gemini-1.5-pro',
             'gemini-3.1-flash-lite-preview-thinking-medium',
+            'gemini-3.1-flash-lite-preview-thinking-low',
+            'gemini-3-flash-preview',
         ]
         if self.provider == 'gemini' and self.model_name not in valid_models:
             raise ValueError(

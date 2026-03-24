@@ -240,6 +240,24 @@ fastify.register(require('@fastify/static'), {
   prefix: '/uploads/',
 })
 
+// Serve built frontend static files at /slide/
+const slideBuildDir = path.resolve(__dirname, '..', 'slide')
+if (fs.existsSync(slideBuildDir)) {
+  fastify.register(require('@fastify/static'), {
+    root: slideBuildDir,
+    prefix: '/slide/',
+    decorateReply: false,
+    wildcard: false,
+  })
+  // SPA fallback: serve index.html for any /slide/* that doesn't match a file
+  fastify.get('/slide/*', (req, reply) => {
+    reply.sendFile('index.html', slideBuildDir)
+  })
+  fastify.get('/slide', (req, reply) => {
+    reply.redirect('/slide/')
+  })
+}
+
 // ─── Auth decorator ──────────────────────────────────────────────────────────
 
 fastify.decorate('authenticate', async (req, reply) => {

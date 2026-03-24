@@ -311,23 +311,15 @@ _PHASE_MAP = [
     ('Designing thesis structure',    'outline',  'Designing structure'),
     ('Outline created',               'outline',  'Outline created'),
     ('Starting chapter composition',  'writing',  'Starting writing'),
-    ('Introduction complete',         'writing',  'Introduction complete'),
-    ('Literature Review complete',    'writing',  'Literature Review complete'),
-    ('Methodology complete',          'writing',  'Methodology complete'),
-    ('Analysis & Results complete',   'writing',  'Analysis & Results complete'),
-    ('Discussion complete',           'writing',  'Discussion complete'),
-    ('Conclusion complete',           'writing',  'Conclusion complete'),
+    ('complete',                       'writing',  'Chapter complete'),
     ('Starting document compilation', 'compile',  'Compiling document'),
     ('Abstract generated',            'compile',  'Abstract generated'),
     ('Starting document export',      'export',   'Exporting files'),
     ('Generation complete',           'done',     'Generation complete'),
 ]
 
-# Chapter names for tracking
-_CHAPTER_NAMES = [
-    'Introduction', 'Literature Review', 'Methodology',
-    'Analysis & Results', 'Discussion', 'Conclusion',
-]
+# Chapter names are now dynamic — determined by the Architect agent outline
+_CHAPTER_NAMES = []  # Populated at runtime from parsed outline
 
 
 class JobCancelledError(Exception):
@@ -438,7 +430,7 @@ def _run_generation(job_id: str, params: dict):
                 with _jobs_lock:
                     _jobs[job_id]['status'] = 'chapter_review'
                     _jobs[job_id]['review_chapter'] = section_key
-                    _jobs[job_id]['review_chapter_name'] = chapter_name or f'Chapter {chapter_num}'
+                    _jobs[job_id]['review_chapter_name'] = f'第{chapter_num}章' if chapter_num else (chapter_name or 'Chapter')
                     _jobs[job_id]['review_content'] = chapter_content[:8000]
                 log(f'📖 {chapter_name or "Chapter"} ready for review')
                 # Block until user approves
@@ -586,27 +578,48 @@ def generate_outline():
     word_info = f'\n- Target length: approximately {target_words} words' if target_words else ''
     cite_info = f'\n- Target citations: approximately {target_citations} references' if target_citations else ''
 
-    prompt = f"""Generate a detailed academic paper outline for the following topic.
+    # Determine word count range from level if not provided by user
+    from draft_generator import get_word_count_targets
+    word_targets = get_word_count_targets(level)
+    default_words = word_targets['total']
+    effective_words = target_words or default_words
+
+    prompt = f"""You are a world-class academic paper architect. Design a paper structure by studying what the best published papers on this topic look like — NOT by following a fixed template.
 
 Topic: {topic}
 Paper type: {level_name}
-Language: {lang_name}{word_info}{cite_info}
+Language: {lang_name}
+Total word count: {effective_words} words{cite_info}
 
-Requirements:
-1. Create a well-structured outline with chapter and section headings
-2. Use markdown format with ## for chapters and ### for sections
-3. Under each section, add 1-2 bullet points describing key content
-4. Include these standard academic sections:
-   - Chapter 1: Introduction (background, problem statement, research objectives, significance)
-   - Chapter 2: Literature Review (key theories, existing research, research gaps)
-   - Chapter 3: Methodology (research design, data collection, analysis methods)
-   - Chapter 4: Analysis & Results (findings, data presentation)
-   - Chapter 5: Discussion (interpretation, implications, limitations)
-   - Chapter 6: Conclusion (summary, contributions, future research)
-5. Adapt chapter names and content to fit the specific topic
-6. Write all content in {lang_name}
+CRITICAL RULES:
+1. Do NOT use a generic IMRaD template (Introduction → Literature Review → Methodology → Results → Discussion → Conclusion). That structure is FORBIDDEN.
+2. Every chapter name MUST contain a keyword specific to the topic. Generic names like "Background", "Analysis", "Discussion", "Methodology" are NOT allowed.
+3. Think: "What structure do the top-cited papers on this exact topic use?" Model your outline after them.
+4. Chapter count must match word count:
+   - 3,000-5,000 words → 3-4 chapters
+   - 5,000-10,000 words → 4-6 chapters
+   - 10,000-20,000 words → 6-8 chapters
+   - 20,000-40,000 words → 8-12 chapters
+   - 40,000-80,000 words → 10-15 chapters
+5. Each ## chapter heading MUST include a word count target: (~XXX words)
+6. The sum of all chapter word counts must approximately equal {effective_words} words.
 
-Return ONLY the outline in markdown format, no other text."""
+OUTPUT FORMAT (use exactly this markdown structure):
+# [Paper Title]
+
+## Chapter 1: [Topic-Specific Name] (~XXX words)
+### 1.1 [Subsection]
+- [Brief content note]
+### 1.2 [Subsection]
+- [Brief content note]
+
+## Chapter 2: [Topic-Specific Name] (~XXX words)
+### 2.1 [Subsection]
+- [Brief content note]
+
+[... more chapters as needed ...]
+
+Write ALL content in {lang_name}. Return ONLY the outline in markdown format."""
 
     try:
         from utils.agent_runner import setup_model
