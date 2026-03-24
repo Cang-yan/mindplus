@@ -1,0 +1,77 @@
+# Root monorepo .gitignore
+# Merged from:
+# - core-service/.gitignore
+# - opendraft-project/.gitignore
+
+# Secrets / env
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+.claude/
+.vscode/
+
+# Java / Maven / Build
+target/
+build/
+dist/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# Java IDE files
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/nbdist/
+/.nb-gradle/
+
+# Node
+node_modules/
+
+# Cache / local data
+.claude/
+/opendraft-project/.citation_cache_orchestrator.json
+/opendraft-project/papers.json
+
+# Output (scope-limited to opendraft-project)
+/opendraft-project/opendraft_output/
+/opendraft-project/**/*.pdf
+/opendraft-project/**/*.docx
+/opendraft-project/**/*.zip
+
+# Logs / temp
+*.log
+/tmp/
+
+# Project-specific local assets
+/core-service/template_pic/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# OS
+.DS_Store
+Thumbs.db

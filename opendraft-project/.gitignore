@@ -1,0 +1,34 @@
+# Secrets
+.env
+*.key
+*.pem
+
+# Cache & local data
+.citation_cache_orchestrator.json
+papers.json
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+
+# Output
+opendraft_output/
+*.pdf
+*.docx
+*.zip
+
+# Logs
+*.log
+/tmp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

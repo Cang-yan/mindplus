@@ -1,0 +1,17 @@
+rich
+requests
+PyYAML
+python-docx
+pybtex
+psutil
+python-dotenv
+beautifulsoup4
+lxml
+anthropic
+markdown
+google-generativeai
+weasyprint
+openai
+citeproc-py
+flask
+PyMySQL

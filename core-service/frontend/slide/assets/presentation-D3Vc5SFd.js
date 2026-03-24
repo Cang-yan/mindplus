@@ -1,0 +1,1 @@
+import{r as t}from"./req-a3mNhq6f.js";const n={getAll:()=>t.get("/api/presentations"),getById:e=>t.get(`/api/presentations/${e}`),create:e=>t.post("/api/presentations",e),update:(e,r)=>t.put(`/api/presentations/${e}`,r),delete:e=>t.delete(`/api/presentations/${e}`),duplicate:e=>t.post(`/api/presentations/${e}/duplicate`)};export{n as p};

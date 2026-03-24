@@ -1,0 +1,32 @@
+{
+  "name": "core-service",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Core service workspace (frontend + backend)",
+  "scripts": {
+    "start": "node -e \"console.error('[DEPRECATED] Static mode has been removed. Use npm run dev (frontend + backend) or npm run frontend:dev.'); process.exit(1)\"",
+    "dev": "npm run dev:all",
+    "dev:all": "node scripts/dev-aippt.mjs",
+    "dev:aippt": "npm run dev:all",
+    "dev:frontend": "npm run frontend:dev",
+    "dev:backend": "npm run frontend:server:dev",
+    "dev:static": "node -e \"console.error('[DEPRECATED] Static mode has been removed. Use npm run dev.'); process.exit(1)\"",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:dev:jitword": "npm --prefix frontend run dev:jitword",
+    "frontend:build": "npm --prefix frontend run build",
+    "frontend:build:jitword": "npm --prefix frontend run build:jitword",
+    "frontend:build:flowmix": "npm --prefix frontend run build:flowmix",
+    "frontend:preview": "npm --prefix frontend run preview",
+    "frontend:lint": "npm --prefix frontend run lint",
+    "frontend:format": "npm --prefix frontend run format",
+    "frontend:server:install": "npm --prefix frontend/server install",
+    "frontend:server:start": "npm --prefix frontend/server run start",
+    "frontend:server:dev": "npm --prefix frontend/server run dev",
+    "install:all": "npm run frontend:install && npm run frontend:server:install",
+    "security:check": "bash scripts/security-check.sh"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

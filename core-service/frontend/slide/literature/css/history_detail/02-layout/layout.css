@@ -1,0 +1,96 @@
+/* ====================
+ * 页面基础与布局样式
+ * ==================== */
+body {
+  font-family: var(--font-family-base);
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  margin: 0;
+
+  /* 移除点阵纹理，回归极致纯净 */
+  background-image: none;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 40px auto;
+  background: var(--color-bg-base);
+  border-radius: var(--radius-xl);
+  /* 使用变量定义的轻量化阴影 */
+  box-shadow: var(--shadow-lg);
+  padding: 48px 64px; /* 进一步增加水平内边距，增强留白感 */
+  border: 1px solid var(--color-border-light); /* 极淡的边框 */
+  position: relative;
+}
+
+/* ====================
+ * 标签页导航样式（极简设计）
+ * 设计原则：Slate/Indigo 主题
+ * ==================== */
+.tabs-container {
+  display: flex;
+  gap: 1.5rem; /* 大幅增加间距，更现代 */
+  border-bottom: 1px solid var(--color-border-light);
+  margin-bottom: 2.5rem;
+  padding-bottom: 0;
+}
+
+.tab-btn {
+  padding: 0.75rem 0; /* 仅保留上下内边距，左右靠间距控制 */
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  font-size: 0.9375rem; /* 15px */
+  font-weight: 500;
+  color: var(--slate-500);
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+  position: relative;
+  margin-bottom: -1px;
+  border-radius: 0; /* 移除圆角，纯下划线风格 */
+}
+
+.tab-btn:hover:not(.active) {
+  color: var(--slate-700);
+  background: transparent; /* 移除悬停背景，保持极简 */
+}
+
+.tab-btn.active {
+  color: var(--indigo-600);
+  font-weight: 600;
+  border-bottom-color: var(--indigo-600);
+  background: transparent; /* 移除激活背景 */
+}
+
+/* 适应较小屏幕的标签页按钮 */
+@media (max-width: 768px) {
+  .container {
+    padding: 24px;
+    margin: 16px;
+  }
+
+  .tabs-container {
+    gap: 1rem;
+  }
+
+  .tab-btn {
+    padding: 0.625rem 0;
+    font-size: 0.875rem;
+  }
+}
+
+/* ====================
+ * 标签页内容区域样式
+ * ==================== */
+.tab-content {
+  background: transparent;
+  padding: 8px 0;
+  min-height: 300px;
+  margin-top: 0;
+  /* 优化阅读体验的字体设置 */
+  font-size: 1.0625rem; /* 17px */
+  line-height: 1.8; /* 略微增加行高 */
+  color: var(--slate-700);
+  letter-spacing: 0.01em; /* 极微小的字间距增加 */
+}
