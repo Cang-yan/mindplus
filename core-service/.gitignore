@@ -71,8 +71,7 @@ frontend/*.sln
 frontend/*.sw?
 frontend/*.tsbuildinfo
 
-frontend/public/template_pic/*
-!frontend/public/template_pic/.gitkeep
-!frontend/public/template_pic/README.md
+# Track template covers in Git so Git-based deployments include local fallback images.
+!frontend/public/template_pic/
 frontend/slide/template_pic/
 frontend/slide/
