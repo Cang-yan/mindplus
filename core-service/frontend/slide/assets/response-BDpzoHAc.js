@@ -1,1 +1,0 @@
-function o(t){if(t&&typeof t=="object"&&("code"in t||"message"in t))return t;if(t&&typeof t=="object"&&"data"in t){const n=t.data;return n&&typeof n=="object"&&("code"in n||"message"in n)?n:{code:200,data:n}}return{code:200,data:t}}export{o as u};
