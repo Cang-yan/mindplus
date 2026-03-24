@@ -6,38 +6,6 @@
         <p>记录 ID：{{ record?.id || '-' }}</p>
       </div>
       <div class="header-actions">
-        <a-select
-          v-model="insertElementValue"
-          class="header-select header-select-insert"
-          size="mini"
-          placeholder="插入元素"
-          :disabled="!pptxObj || isGeneratingPpt"
-          @change="handleInsertElement"
-        >
-          <a-option value="text,title1">插入大标题</a-option>
-          <a-option value="text,title2">插入副标题</a-option>
-          <a-option value="text,content">插入正文文本</a-option>
-          <a-option value="image">插入图片</a-option>
-          <a-option value="geometry">插入随机形状</a-option>
-          <a-option value="table">插入表格</a-option>
-          <a-option value="chart,bar">插入柱状图</a-option>
-          <a-option value="chart,pie">插入饼图</a-option>
-          <a-option value="chart,doughnut">插入环形图</a-option>
-          <a-option value="chart,line">插入折线图</a-option>
-        </a-select>
-
-        <a-select
-          v-model="downloadAnimationType"
-          class="header-select header-select-download"
-          size="mini"
-          placeholder="下载选项"
-          :disabled="isGeneratingPpt"
-        >
-          <a-option value="">默认</a-option>
-          <a-option value="0">不添加动画</a-option>
-          <a-option value="1">智能添加动画</a-option>
-        </a-select>
-
         <div class="download-action">
           <a-button :loading="isDownloadingPpt" :disabled="!pptxObj || isGeneratingPpt" @click="handleDownloadPpt">
             渲染并下载
@@ -862,27 +830,20 @@ onBeforeUnmount(() => {
 
 .download-action {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .billing-estimate-tip {
   font-size: 12px;
   color: #2563eb;
-  line-height: 1.2;
-}
-
-.header-select {
-  flex: 0 0 auto;
-}
-
-.header-select-insert {
-  width: 120px;
-}
-
-.header-select-download {
-  width: 96px;
+  line-height: 1;
+  white-space: nowrap;
+  font-weight: 500;
+  flex: 0 1 auto;
 }
 
 .workspace-status {
@@ -1086,14 +1047,6 @@ onBeforeUnmount(() => {
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;
-  }
-
-  .header-select-insert {
-    width: 140px;
-  }
-
-  .header-select-download {
-    width: 120px;
   }
 
   .workspace-body {
