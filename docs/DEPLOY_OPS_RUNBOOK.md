@@ -1,4 +1,4 @@
-# MindPlus GitHub 更新与部署手册（低改动版）
+# MindPlus GitHub 更新与部署手册
 
 适用项目：`/home/xx/LINGINE/mindplus`  
 更新时间：`2026-03-24`
@@ -68,7 +68,111 @@ pip install -r requirements.txt
 deactivate
 ```
 
-### 2.4 systemd（沿用现网，不强制重做）
+### 2.4 首次部署：systemd 服务配置（重点）
+
+以下是首次部署建议的最小 service 方案，名称保持与本文后续命令一致：
+- `aippt-server`
+- `opendraft`
+- `nginx`
+
+如果你已有线上服务名，建议继续沿用现有名字，减少改动成本。
+
+#### 2.4.1 `aippt-server`（core-service 后端）
+
+文件：`/etc/systemd/system/aippt-server.service`
+
+```ini
+[Unit]
+Description=MindPlus Core Backend Service
+After=network.target opendraft.service
+Wants=opendraft.service
+
+[Service]
+Type=simple
+User=xx
+WorkingDirectory=/home/xx/LINGINE/mindplus/core-service
+Environment=NODE_ENV=production
+Environment=AIPPT_ENV_FILE=/home/xx/LINGINE/mindplus/core-service/.env
+ExecStart=/usr/bin/npm run frontend:server:start
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### 2.4.2 `opendraft`（文献服务）
+
+文件：`/etc/systemd/system/opendraft.service`
+
+```ini
+[Unit]
+Description=OpenDraft Service
+After=network.target
+
+[Service]
+Type=simple
+User=xx
+WorkingDirectory=/home/xx/LINGINE/mindplus/opendraft-project
+EnvironmentFile=/home/xx/LINGINE/mindplus/opendraft-project/.env
+ExecStart=/home/xx/LINGINE/mindplus/opendraft-project/.venv/bin/python app.py
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+```
+
+#### 2.4.3 （可选）`minduser`（同机部署登录系统时）
+
+如果 MindUser 不在本机部署，这节可跳过。  
+如果在同一台机器，可参考：
+
+文件：`/etc/systemd/system/minduser.service`
+
+```ini
+[Unit]
+Description=MindUser Service
+After=network.target
+
+[Service]
+Type=simple
+User=xx
+WorkingDirectory=/home/xx/LINGINE/minduser
+Environment=NODE_ENV=production
+EnvironmentFile=/home/xx/LINGINE/minduser/.env
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 2.5 首次部署：启用并启动服务
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now opendraft
+sudo systemctl enable --now aippt-server
+sudo systemctl enable --now nginx
+
+# 若同机部署 MindUser，再执行：
+# sudo systemctl enable --now minduser
+```
+
+检查状态：
+
+```bash
+sudo systemctl status aippt-server --no-pager
+sudo systemctl status opendraft --no-pager
+sudo systemctl status nginx --no-pager
+```
+
+### 2.6 已有线上服务：只做状态确认（低改动）
 
 如果你线上已经有服务在跑，建议只确认可重启即可：
 
