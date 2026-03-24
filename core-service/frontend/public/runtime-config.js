@@ -34,8 +34,8 @@ window.__APP_CONFIG__ = {
   // ── 主项目 AiPPT 接口配置 ───────────────────────────────────────────────
   VITE_PPT_BASE_URL: '',
   VITE_PPT_API_KEY: '',
-  VITE_PPT_API_PREFIX: '/docmee/v1/api/ppt',
-  VITE_PPT_JSON_API_PREFIX: '/docmee/v1/api/pptjson',
+  VITE_PPT_API_PREFIX: '',
+  VITE_PPT_GEN_API_PREFIX: '',
 
   // ── 图片搜索 API 密钥 ──────────────────────────────────────────────────
   VITE_GIPHY_API_KEY: '',

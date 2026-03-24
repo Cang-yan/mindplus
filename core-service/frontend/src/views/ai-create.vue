@@ -881,8 +881,8 @@ async function hydrateFromRecord(recordId) {
 
 onMounted(async () => {
   const config = resolvePptApiConfig()
-  if (!config.baseUrl || !config.apiKey) {
-    Message.warning('未检测到主项目 API 配置，请先配置 VITE_PPT_BASE_URL / VITE_PPT_API_KEY')
+  if (import.meta.env.DEV && !config.apiKey) {
+    console.warn('[ai-create] VITE_PPT_API_KEY 未配置，AiPPT 相关请求可能失败')
   }
 
   refreshGenerationRecords()

@@ -1,7 +1,9 @@
 import { getRuntimeConfig } from '@/utils/runtimeConfig'
 
 const DEFAULT_API_PREFIX = '/docmee/v1/api/ppt'
-const DEFAULT_PPT_JSON_PREFIX = '/docmee/v1/api/pptjson'
+const DEFAULT_PPT_GEN_PREFIX = '/docmee/v1/api/pptjson'
+const DOWNLOAD_PPTX_SUFFIX_RE = /\/downloadpptx\/?$/i
+const JSON2PPT_SUFFIX_RE = /\/json2ppt\/?$/i
 
 function trimEndSlash(value) {
   return String(value || '').replace(/\/+$/, '')
@@ -51,18 +53,29 @@ export function resolvePptApiConfig() {
     import.meta.env.VITE_PPT_API_PREFIX ||
     import.meta.env.VITE_AIPPT_API_PREFIX ||
     DEFAULT_API_PREFIX
-  const pptJsonPrefix =
+  const genApiPrefix =
+    getRuntimeConfig('VITE_PPT_GEN_API_PREFIX') ||
+    getRuntimeConfig('VITE_AIPPT_PPT_GEN_API_PREFIX') ||
+    import.meta.env.VITE_PPT_GEN_API_PREFIX ||
+    import.meta.env.VITE_AIPPT_PPT_GEN_API_PREFIX ||
     getRuntimeConfig('VITE_PPT_JSON_API_PREFIX') ||
     getRuntimeConfig('VITE_AIPPT_PPT_JSON_API_PREFIX') ||
     import.meta.env.VITE_PPT_JSON_API_PREFIX ||
     import.meta.env.VITE_AIPPT_PPT_JSON_API_PREFIX ||
-    DEFAULT_PPT_JSON_PREFIX
+    DEFAULT_PPT_GEN_PREFIX
+  const normalizedGenApiPrefix = String(genApiPrefix || '').trim() || DEFAULT_PPT_GEN_PREFIX
+  const genApiMode = DOWNLOAD_PPTX_SUFFIX_RE.test('/' + trimBothSlash(normalizedGenApiPrefix))
+    ? 'downloadPptx'
+    : 'json2ppt'
 
   return {
     baseUrl,
     apiKey: String(apiKey || '').trim(),
     apiPrefix: String(apiPrefix || '').trim() || DEFAULT_API_PREFIX,
-    pptJsonPrefix: String(pptJsonPrefix || '').trim() || DEFAULT_PPT_JSON_PREFIX,
+    genApiPrefix: normalizedGenApiPrefix,
+    genApiMode,
+    // backward compatible alias
+    pptJsonPrefix: normalizedGenApiPrefix,
   }
 }
 
@@ -70,7 +83,8 @@ function buildUrlWithPrefix(prefix, path, query) {
   const config = resolvePptApiConfig()
   const base = trimEndSlash(config.baseUrl || window.location.origin)
   const apiPrefix = '/' + trimBothSlash(prefix || DEFAULT_API_PREFIX)
-  const apiPath = '/' + trimBothSlash(path || '')
+  const normalizedPath = trimBothSlash(path || '')
+  const apiPath = normalizedPath ? `/${normalizedPath}` : ''
   const mergedPrefix = base.endsWith(apiPrefix) ? '' : apiPrefix
   return appendQuery(base + mergedPrefix + apiPath, query)
 }
@@ -80,9 +94,28 @@ export function buildPptApiUrl(path, query) {
   return buildUrlWithPrefix(config.apiPrefix, path, query)
 }
 
-export function buildPptJsonApiUrl(path, query) {
+export function resolvePptGenApiMode() {
   const config = resolvePptApiConfig()
-  return buildUrlWithPrefix(config.pptJsonPrefix, path, query)
+  return config.genApiMode || 'json2ppt'
+}
+
+export function buildPptGenApiUrl(path, query) {
+  const config = resolvePptApiConfig()
+  const prefix = String(config.genApiPrefix || '').trim() || DEFAULT_PPT_GEN_PREFIX
+  const normalizedPrefix = '/' + trimBothSlash(prefix)
+  const normalizedPath = trimBothSlash(path || '')
+  if (
+    config.genApiMode === 'json2ppt' &&
+    JSON2PPT_SUFFIX_RE.test(normalizedPrefix) &&
+    (!normalizedPath || normalizedPath === 'json2ppt')
+  ) {
+    return buildUrlWithPrefix(prefix, '', query)
+  }
+  return buildUrlWithPrefix(prefix, path, query)
+}
+
+export function buildPptJsonApiUrl(path, query) {
+  return buildPptGenApiUrl(path, query)
 }
 
 export function getAuthHeaders(extra) {
@@ -276,6 +309,67 @@ export async function fetchAsyncPptInfo(pptId) {
     headers: getAuthHeaders(),
   })
   const json = await response.json()
+  return json
+}
+
+function tryParseJsonObject(raw) {
+  if (raw == null) {
+    return null
+  }
+  const text = String(raw).trim()
+  if (!text) {
+    return null
+  }
+  try {
+    const parsed = JSON.parse(text)
+    return parsed && typeof parsed === 'object' ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function extractApiErrorMessage(json, fallback = '') {
+  return String(
+    json?.message ||
+    json?.msg ||
+    json?.error?.message ||
+    fallback ||
+    ''
+  ).trim()
+}
+
+async function requestDownloadPptxById(id) {
+  const mode = resolvePptGenApiMode()
+  const url = mode === 'downloadPptx'
+    ? buildPptGenApiUrl('')
+    : buildPptApiUrl('/downloadPptx')
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+    body: JSON.stringify({ id }),
+  })
+  const text = await response.text()
+  const json = tryParseJsonObject(text)
+  const errorMessage = extractApiErrorMessage(json)
+  return { response, json, errorMessage }
+}
+
+export async function downloadPptxById(pptId) {
+  const id = String(pptId || '').trim()
+  if (!id) {
+    throw new Error('缺少 pptId，无法调用 downloadPptx')
+  }
+
+  const { response, json, errorMessage } = await requestDownloadPptxById(id)
+  if (!response.ok) {
+    throw new Error(errorMessage || `downloadPptx 调用失败（HTTP ${response.status}）`)
+  }
+  if (!json) {
+    throw new Error('downloadPptx 返回格式异常')
+  }
+  if (Object.prototype.hasOwnProperty.call(json, 'code') && Number(json.code) !== 0) {
+    throw new Error(errorMessage || 'downloadPptx 调用失败')
+  }
   return json
 }
 

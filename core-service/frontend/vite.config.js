@@ -144,6 +144,12 @@ export default defineConfig(({ mode }) => {
   )
 
   return {
+    // 统一让前端 import.meta.env 从 core-service/.env* 读取，
+    // 避免“前端读不到根目录 .env”的配置错位。
+    envDir: workspaceRoot,
+    // 仅将 BILLING_PRICE_* 暴露给前端用于“预估展示”，
+    // 避免把 BILLING_INTERNAL_KEY 等敏感后端配置暴露到浏览器。
+    envPrefix: ['VITE_', 'BILLING_PRICE_'],
     define: {
       'process.browser': true,
       'process.env': {

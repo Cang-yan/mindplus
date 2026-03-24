@@ -27,6 +27,8 @@ const FALLBACK_UNIT_PRICE: Record<BillingEstimateScene, number> = {
 
 const BILLING_PRICE_KEYS: Record<BillingEstimateScene, string[]> = {
   aippt_json2ppt: [
+    'VITE_BILLING_PRICE_AIPPT_GENPPT',
+    'BILLING_PRICE_AIPPT_GENPPT',
     'VITE_BILLING_PRICE_AIPPT_JSON2PPT',
     'BILLING_PRICE_AIPPT_JSON2PPT',
   ],

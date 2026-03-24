@@ -102,11 +102,13 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import {
-  buildPptJsonApiUrl,
+  buildPptGenApiUrl,
   decodePptxProperty,
+  downloadPptxById,
   fetchAsyncPptInfo,
   generateContentStream,
   getAuthHeaders,
+  resolvePptGenApiMode,
 } from '@/api/main-ppt'
 import { loadExternalScripts } from '@/utils/loadExternalScripts'
 import {
@@ -710,10 +712,30 @@ async function handleDownloadPpt() {
       animationType: downloadAnimationType.value || 'default',
     })
 
+    const genMode = resolvePptGenApiMode()
+
+    if (genMode === 'downloadPptx') {
+      const pptId = String(record.value?.pptId || latestPptId.value || '').trim()
+      if (!pptId) {
+        throw new Error('当前下载通道需要 pptId，请先完成生成后再试')
+      }
+      const resp = await downloadPptxById(pptId)
+      const fileUrl = String(resp?.data?.fileUrl || '').trim()
+      if (!fileUrl) {
+        throw new Error('downloadPptx 未返回 fileUrl')
+      }
+      const link = document.createElement('a')
+      link.href = fileUrl
+      link.download = `${resp?.data?.subject || record.value?.topic || 'download'}.pptx`
+      link.click()
+      Message.success('已开始下载 PPT')
+      return
+    }
+
     const animationType = ['1', '2'].includes(downloadAnimationType.value)
       ? downloadAnimationType.value
       : undefined
-    const response = await fetch(buildPptJsonApiUrl('/json2ppt', { animationType }), {
+    const response = await fetch(buildPptGenApiUrl('/json2ppt', { animationType }), {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify(pptxObj.value),

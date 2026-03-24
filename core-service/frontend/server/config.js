@@ -83,7 +83,10 @@ module.exports = {
     overdraftLimit: parseOverdraftLimit(process.env.BILLING_OVERDRAFT_LIMIT, -1),
     prices: {
       aippt_outline: parseNonNegativeNumber(process.env.BILLING_PRICE_AIPPT_OUTLINE, 1),
-      aippt_json2ppt: parseNonNegativeNumber(process.env.BILLING_PRICE_AIPPT_JSON2PPT, 1),
+      aippt_json2ppt: parseNonNegativeNumber(
+        process.env.BILLING_PRICE_AIPPT_GENPPT || process.env.BILLING_PRICE_AIPPT_JSON2PPT,
+        1
+      ),
       literature_ocr: parseNonNegativeNumber(process.env.BILLING_PRICE_LITERATURE_OCR, 1),
       literature_translate: parseNonNegativeNumber(process.env.BILLING_PRICE_LITERATURE_TRANSLATE, 1),
       literature_assistant_generate: parseNonNegativeNumber(process.env.BILLING_PRICE_LITERATURE_ASSISTANT_GENERATE, 1),
