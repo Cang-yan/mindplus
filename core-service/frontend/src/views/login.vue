@@ -109,22 +109,6 @@
                 <div class="divider-line"></div>
               </div>
 
-              <!-- Demo Account Quick Login -->
-              <div class="demo-account-section">
-                <button class="demo-login-btn" @click="handleDemoLogin" :disabled="demoLoading">
-                  <span v-if="!demoLoading" class="demo-btn-inner">
-                    <Icon name="rocket" :size="18" />
-                    <span>{{ tAuth('demoLogin') }}</span>
-                    <span class="demo-badge">{{ tAuth('demoFree') }}</span>
-                  </span>
-                  <span v-else class="demo-btn-inner">
-                    <span class="demo-loading-dot"></span>
-                    {{ tAuth('demoLoading') }}
-                  </span>
-                </button>
-                <p class="demo-hint">{{ tAuth('demoHint') }}</p>
-              </div>
-
               <!-- Activation Code Login Form -->
               <a-form :model="form" layout="vertical" @submit="handleSubmit">
                 <a-form-item field="name" class="form-item">
@@ -440,7 +424,6 @@ const showEmailLogin = ref(false)
 const showEmailRegister = ref(false)
 const agreeTerms = ref(false)
 const isEmailValid = ref(false)
-const demoLoading = ref(false)
 
 // Verification code states
 const verificationCodeSent = ref(false)
@@ -703,61 +686,6 @@ const handleBackToRegister = () => {
   if (countdownTimer) clearInterval(countdownTimer)
   if (resendTimer) clearInterval(resendTimer)
   showEmailRegister.value = false
-}
-
-// Demo account quick login
-const DEMO_ACCOUNT = 'demo@aippt.cc'
-const DEMO_PASSWORD = 'demo123456'
-
-const handleDemoLogin = async () => {
-  if (demoLoading.value) return
-  demoLoading.value = true
-  try {
-    const res = await authApi.login({
-      email: DEMO_ACCOUNT,
-      password: DEMO_PASSWORD
-    })
-    const payload = unwrapResponse(res)
-    if ((payload?.code ?? 0) === 200 && payload?.data?.token) {
-      const u = payload.data
-      localStorage.setItem('jwt_token', u.token)
-      localStorage.setItem('uid', u.user?.id || 'demo')
-      localStorage.setItem('username', u.user?.username || u.user?.email || 'Demo User')
-      localStorage.setItem('userRole', u.user?.role || '0')
-      localStorage.setItem('userColor', generateRandomColor())
-      Message.success(tAuth('demoLoginSuccess'))
-      const redirect = router.currentRoute.value.query.redirect
-      if (redirect) {
-        const baseUrl = import.meta.env.BASE_URL || '/'
-        const cleanRedirect = typeof redirect === 'string' && redirect.startsWith(baseUrl)
-          ? redirect.slice(baseUrl.length - 1)
-          : redirect
-        router.push(cleanRedirect)
-      } else {
-        router.push('/')
-      }
-    } else {
-      // Fallback: use local guest mode without backend
-      const demoUid = 'demo_' + Math.random().toString(36).slice(2, 8)
-      localStorage.setItem('uid', demoUid)
-      localStorage.setItem('username', 'Demo User')
-      localStorage.setItem('userRole', '0')
-      localStorage.setItem('userColor', generateRandomColor())
-      Message.success(tAuth('demoLoginSuccess'))
-      router.push('/')
-    }
-  } catch {
-    // Network error or no backend: use local guest mode
-    const demoUid = 'demo_' + Math.random().toString(36).slice(2, 8)
-    localStorage.setItem('uid', demoUid)
-    localStorage.setItem('username', 'Demo User')
-    localStorage.setItem('userRole', '0')
-    localStorage.setItem('userColor', generateRandomColor())
-    Message.success(tAuth('demoLoginSuccess'))
-    router.push('/')
-  } finally {
-    demoLoading.value = false
-  }
 }
 
 const handleSubmit = async (data) => {
@@ -1787,89 +1715,4 @@ onMounted(async () => {
   }
 }
 
-/* Demo Account Section */
-.demo-account-section {
-  margin-bottom: 20px;
-}
-
-.demo-login-btn {
-  width: 100%;
-  padding: 12px 20px;
-  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  color: #fff;
-  border: none;
-  border-radius: 12px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
-  position: relative;
-  overflow: hidden;
-}
-
-.demo-login-btn::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.demo-login-btn:hover:not(:disabled)::before {
-  opacity: 1;
-}
-
-.demo-login-btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(37, 99, 235, 0.4);
-}
-
-.demo-login-btn:active:not(:disabled) {
-  transform: translateY(0);
-}
-
-.demo-login-btn:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
-}
-
-.demo-btn-inner {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-.demo-badge {
-  background: rgba(255,255,255,0.25);
-  padding: 2px 8px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.3px;
-}
-
-.demo-hint {
-  margin: 8px 0 0;
-  text-align: center;
-  font-size: 12px;
-  color: #94a3b8;
-  line-height: 1.4;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.8); }
-}
-
-.demo-loading-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #fff;
-  display: inline-block;
-  animation: pulse 1s ease-in-out infinite;
-  margin-right: 4px;
-}</style>
+</style>

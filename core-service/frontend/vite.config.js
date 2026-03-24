@@ -78,8 +78,9 @@ export default defineConfig(({ mode }) => {
     return Number.isFinite(n) && n > 0 ? String(n) : String(fallback)
   }
 
-  // Unified backend port for local development (frontend + backend).
-  const devApiHost = env.AIPPT_BACKEND_HOST || env.VITE_DEV_API_HOST || localIP
+  // Unified backend host for local development (frontend + backend).
+  // Vue 前后端服务统一运行时，一般使用 127.0.0.1。
+  const devApiHost = env.VITE_BACKEND_HOST || env.VITE_DEV_API_HOST || localIP
   const devApiPort = normalizePort(
     env.VITE_BACKEND_PORT || env.VITE_DEV_API_PORT || env.AIPPT_BACKEND_PORT || env.PORT,
     3001
