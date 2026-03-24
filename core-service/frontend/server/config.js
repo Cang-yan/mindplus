@@ -196,17 +196,16 @@ module.exports = {
 
   // LINGINE AI (OCR/文献翻译)
   lingine: {
-    // 与前端统一：默认使用 VITE_OPENAI_BASE_URL；兼容老变量 LINGINE_AI_BASE_URL
-    baseUrl: process.env.VITE_OPENAI_BASE_URL || process.env.LINGINE_AI_BASE_URL || 'https://api.openai.com/v1',
-    // OCR/文献翻译专用 key，不再回退 assistant key（避免串用）
-    apiKey: process.env.OCR_AI_KEY || process.env.LINGINE_AI_KEY || '',
+    // 与前端统一：默认使用 VITE_OPENAI_BASE_URL
+    baseUrl: process.env.VITE_OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    // OCR 专用 key（不兼容旧变量名）
+    apiKey: process.env.OCR_AI_KEY || '',
   },
 
-  // 文献翻译专用 OpenAI 兼容配置（按用户要求走 VITE_FY_*）
+  // 文献翻译专用 OpenAI 兼容配置（不兼容旧变量名）
   literatureTranslate: {
     baseUrl: String(
       process.env.LITERATURE_TRANSLATE_BASE_URL ||
-      process.env.VITE_FY_BASE_URL ||
       'https://api.openai.com/v1'
     ).trim(),
     apiKey: String(
@@ -215,12 +214,10 @@ module.exports = {
     ).trim(),
     model: String(
       process.env.LITERATURE_TRANSLATE_MODEL ||
-      process.env.VITE_FY_MODEL ||
       'deepl-en'
     ).trim() || 'deepl-en',
     fallbackModels: parseStringList(
       process.env.LITERATURE_TRANSLATE_FALLBACK_MODELS ||
-      process.env.VITE_FY_FALLBACK_MODELS ||
       'gpt-4o-mini,gpt-4.1-mini,deepseek-chat'
     ),
   },

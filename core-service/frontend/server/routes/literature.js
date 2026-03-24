@@ -757,7 +757,7 @@ module.exports = async function literatureRoutes(fastify) {
   // 接收前端渲染好的页面图片(base64)，调用 glm-4v 进行 OCR，返回 markdown 文本
   fastify.post('/ocr', auth, async (req, reply) => {
     if (!config.lingine.apiKey) {
-      return reply.code(501).send({ error: 'LINGINE OCR 服务未配置，请在 .env 中设置 OCR_AI_KEY（兼容 LINGINE_AI_KEY）' })
+      return reply.code(501).send({ error: 'LINGINE OCR 服务未配置，请在 .env 中设置 OCR_AI_KEY' })
     }
 
     const { images, fileName, pageOffset } = req.body || {}
@@ -886,7 +886,7 @@ module.exports = async function literatureRoutes(fastify) {
       return reply.code(501).send({ error: '翻译服务未配置，请在 .env 中设置 LITERATURE_TRANSLATE_API_KEY' })
     }
     if (!translateBaseUrl) {
-      return reply.code(501).send({ error: '翻译服务未配置，请在 .env 中设置 VITE_FY_BASE_URL' })
+      return reply.code(501).send({ error: '翻译服务未配置，请在 .env 中设置 LITERATURE_TRANSLATE_BASE_URL' })
     }
 
     const { text, systemPrompt, targetLang } = req.body || {}

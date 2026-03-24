@@ -2,13 +2,38 @@ import { getRuntimeConfig } from '@/utils/runtimeConfig'
 
 const DEFAULT_API_PREFIX = '/docmee/v1/api/ppt'
 const DEFAULT_PPT_GEN_PREFIX = '/docmee/v1/api/pptjson'
-const PROXY_API_PREFIX = '/api/aippt/proxy/ppt'
-const PROXY_PPT_GEN_PREFIX = '/api/aippt/proxy/pptjson'
+const PROXY_API_PREFIX = '/api/aippt/ppt'
+const PROXY_PPT_GEN_PREFIX = '/api/aippt/pptjson'
 const DOWNLOAD_PPTX_SUFFIX_RE = /\/downloadpptx\/?$/i
 const JSON2PPT_SUFFIX_RE = /\/json2ppt\/?$/i
 
 function trimEndSlash(value) {
   return String(value || '').replace(/\/+$/, '')
+}
+
+function normalizeBaseApiUrl(raw) {
+  const text = String(raw || '').trim()
+  if (!text) return ''
+  const noTrailingSlash = text.replace(/\/+$/, '')
+  return noTrailingSlash.replace(/\/api$/i, '')
+}
+
+function resolveBackendBaseUrl() {
+  try {
+    const g = globalThis
+    const fromGlobal = g && g.__PX_BASE_API_URL__
+    const fromStorage = typeof localStorage !== 'undefined' ? localStorage.getItem('px_base_api_url') : ''
+    const fromBuild =
+      (g && g.process && g.process.env && g.process.env.BASE_API_URL) ||
+      (typeof process !== 'undefined' && process.env ? process.env.BASE_API_URL : '')
+    return normalizeBaseApiUrl(fromGlobal || fromStorage || fromBuild || '')
+  } catch {
+    try {
+      return normalizeBaseApiUrl(typeof process !== 'undefined' && process.env ? process.env.BASE_API_URL : '')
+    } catch {
+      return ''
+    }
+  }
 }
 
 function trimBothSlash(value) {
@@ -106,7 +131,7 @@ export function resolvePptApiConfig() {
 
   if (useServerProxy) {
     return {
-      baseUrl: '',
+      baseUrl: resolveBackendBaseUrl(),
       apiKey: '',
       apiPrefix: PROXY_API_PREFIX,
       genApiPrefix: PROXY_PPT_GEN_PREFIX,

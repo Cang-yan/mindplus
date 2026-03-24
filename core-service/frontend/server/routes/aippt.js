@@ -331,34 +331,41 @@ module.exports = async function aipptRoutes(fastify) {
       updated_at = VALUES(updated_at)
   `)
 
-  // ── AiPPT upstream proxy（前端无密钥模式） ────────────────────────────────
-  fastify.post('/proxy/ppt/generateOutline', auth, async (req, reply) => {
-    return proxyPptSse(req, reply, '/generateOutline')
-  })
+  // ── AiPPT upstream relay（前端无密钥模式） ─────────────────────────────────
+  // 统一使用 /api/aippt/ppt/* 与 /api/aippt/pptjson/*。
+  function registerUpstreamRelayRoutes(pathPrefix = '') {
+    const prefix = String(pathPrefix || '').replace(/\/+$/, '')
 
-  fastify.post('/proxy/ppt/generateContent', auth, async (req, reply) => {
-    return proxyPptSse(req, reply, '/generateContent')
-  })
+    fastify.post(`${prefix}/ppt/generateOutline`, auth, async (req, reply) => {
+      return proxyPptSse(req, reply, '/generateOutline')
+    })
 
-  fastify.post('/proxy/ppt/randomTemplates', auth, async (req, reply) => {
-    return proxyPptBuffer(req, reply, { method: 'POST', path: '/randomTemplates' })
-  })
+    fastify.post(`${prefix}/ppt/generateContent`, auth, async (req, reply) => {
+      return proxyPptSse(req, reply, '/generateContent')
+    })
 
-  fastify.get('/proxy/ppt/asyncPptInfo', auth, async (req, reply) => {
-    return proxyPptBuffer(req, reply, { method: 'GET', path: '/asyncPptInfo' })
-  })
+    fastify.post(`${prefix}/ppt/randomTemplates`, auth, async (req, reply) => {
+      return proxyPptBuffer(req, reply, { method: 'POST', path: '/randomTemplates' })
+    })
 
-  fastify.post('/proxy/ppt/downloadPptx', auth, async (req, reply) => {
-    return proxyPptBuffer(req, reply, { method: 'POST', path: '/downloadPptx' })
-  })
+    fastify.get(`${prefix}/ppt/asyncPptInfo`, auth, async (req, reply) => {
+      return proxyPptBuffer(req, reply, { method: 'GET', path: '/asyncPptInfo' })
+    })
 
-  fastify.post('/proxy/pptjson', auth, async (req, reply) => {
-    return proxyPptBuffer(req, reply, { method: 'POST', gen: true, path: '' })
-  })
+    fastify.post(`${prefix}/ppt/downloadPptx`, auth, async (req, reply) => {
+      return proxyPptBuffer(req, reply, { method: 'POST', path: '/downloadPptx' })
+    })
 
-  fastify.post('/proxy/pptjson/json2ppt', auth, async (req, reply) => {
-    return proxyPptBuffer(req, reply, { method: 'POST', gen: true, path: '/json2ppt' })
-  })
+    fastify.post(`${prefix}/pptjson`, auth, async (req, reply) => {
+      return proxyPptBuffer(req, reply, { method: 'POST', gen: true, path: '' })
+    })
+
+    fastify.post(`${prefix}/pptjson/json2ppt`, auth, async (req, reply) => {
+      return proxyPptBuffer(req, reply, { method: 'POST', gen: true, path: '/json2ppt' })
+    })
+  }
+
+  registerUpstreamRelayRoutes('')
 
   // GET /api/aippt/history
   fastify.get('/history', auth, async (req) => {
