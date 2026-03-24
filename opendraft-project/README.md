@@ -29,6 +29,21 @@ pip install -r requirements.txt
 pip install httpx[socks]  # 如果使用 SOCKS 代理
 ```
 
+**系统依赖（Word/PDF 导出必需）：**
+
+```bash
+# macOS
+brew install pandoc
+
+# Ubuntu/Debian
+sudo apt install pandoc
+
+# Windows
+choco install pandoc
+```
+
+> 未安装 pandoc 时，DOCX 导出将使用基础模式（不支持表格和复杂格式）。
+
 ### 2. 配置 API Key
 
 创建 `.env` 文件或设置环境变量：

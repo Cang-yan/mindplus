@@ -82,7 +82,7 @@ def log_timing(func):
             logger.error(f"[TRACEBACK] {traceback.format_exc()}")
             raise
     return wrapper
-from utils.agent_runner import setup_model, run_agent, rate_limit_delay, research_citations_via_api
+from utils.agent_runner import setup_model, run_agent, rate_limit_delay, research_citations_via_api, _refine_chapter
 from utils.citation_database import CitationDatabase, save_citation_database, load_citation_database
 from utils.text_utils import smart_truncate
 from utils.deduplicate_citations import deduplicate_citations
@@ -510,28 +510,28 @@ def get_word_count_targets(academic_level: str) -> dict:
             'total': '3,000-5,000',
             'chapters': '3-5',
             'min_citations': 8,
-            'deep_research_min_sources': 12,
+            'deep_research_min_sources': 10,
             'estimated_time_minutes': '5-10',
         },
         'bachelor': {
             'total': '10,000-15,000',
             'chapters': '5-7',
             'min_citations': 12,
-            'deep_research_min_sources': 20,
+            'deep_research_min_sources': 15,
             'estimated_time_minutes': '8-15',
         },
         'master': {
             'total': '25,000-30,000',
             'chapters': '7-10',
             'min_citations': 20,
-            'deep_research_min_sources': 30,
+            'deep_research_min_sources': 25,
             'estimated_time_minutes': '10-25',
         },
         'phd': {
             'total': '50,000-80,000',
             'chapters': '10-15',
             'min_citations': 30,
-            'deep_research_min_sources': 40,
+            'deep_research_min_sources': 35,
             'estimated_time_minutes': '20-40',
         },
     }
@@ -843,7 +843,8 @@ def generate_draft(
             word_targets = get_word_count_targets(academic_level)
             if target_citations is not None:
                 word_targets['min_citations'] = target_citations
-                word_targets['deep_research_min_sources'] = max(target_citations * 2, 20)
+                # Scale query count proportionally: ~1.5x citations needed, min 10
+                word_targets['deep_research_min_sources'] = max(int(target_citations * 1.5), 10)
             if target_words is not None:
                 word_targets['total'] = target_words
             min_citations = word_targets['min_citations']
@@ -904,69 +905,21 @@ def generate_draft(
 
         rate_limit_delay()
 
-        # Scribe - Summarize top 8 papers (deep analysis)
-        # Only the top 8 most relevant papers are deeply read and summarized.
-        # All other citations remain in the database for {cite_XXX} references.
-        MAX_DEEP_READ = 8
-        all_citations = scout_result.get('citations', [])
-        top_papers_text = ""
-        for i, c in enumerate(all_citations[:MAX_DEEP_READ]):
-            authors_str = ', '.join(c.authors[:3]) if c.authors else 'Unknown'
-            top_papers_text += f"\n### Paper {i+1}: {c.title}\n"
-            top_papers_text += f"**Authors:** {authors_str}\n"
-            top_papers_text += f"**Year:** {c.year or 'N/A'}\n"
-            if getattr(c, 'abstract', None):
-                top_papers_text += f"**Abstract:** {c.abstract[:500]}\n"
-            if getattr(c, 'doi', None):
-                top_papers_text += f"**DOI:** {c.doi}\n"
-            top_papers_text += "\n"
-
+        # Scribe + Signal removed — citations already collected by Scout/Deep Research.
+        # Send fake progress messages to keep frontend display consistent.
         if tracker:
             tracker.log_activity("📝 正在深入研究论文..." if language == 'zh' else "📝 Deep reading research papers...", event_type="info", phase="research")
-        scribe_output = run_agent(
-            model=model,
-            name="Scribe - Summarize Papers",
-            prompt_path="prompts/01_research/scribe.md",
-            user_input=f"Summarize these {min(MAX_DEEP_READ, len(all_citations))} key research papers in depth:\n\n{top_papers_text}",
-            save_to=folders['research'] / "combined_research.md",
-            skip_validation=skip_validation,
-            verbose=verbose,
-            clean_thinking=False
-        )
-        if tracker:
-            tracker.log_activity("✅ Research summaries complete", event_type="found", phase="research")
-
-        # Split scribe output into individual paper files
-        if tracker:
-            tracker.log_activity("📚 Organizing research papers...", event_type="info", phase="research")
-        split_scribe_to_papers(scribe_output, folders['papers'], verbose=verbose)
-        
-        # ALSO extract ALL citations from scout_raw.md as papers (not just Scribe-analyzed ones)
-        # This ensures all 50 citations become individual paper files for Cursor usage
+        # Extract ALL citations from scout_raw.md as individual paper files
         extract_all_citations_as_papers(
             scout_output_path=folders['research'] / "scout_raw.md",
             papers_dir=folders['papers'],
             verbose=verbose
         )
         if tracker:
+            tracker.log_activity("✅ Research summaries complete", event_type="found", phase="research")
+            tracker.log_activity("📚 Organizing research papers...", event_type="info", phase="research")
             tracker.log_activity("✅ All research papers organized", event_type="found", phase="research")
-
-        rate_limit_delay()
-
-        # Signal - Gap analysis
-        if tracker:
             tracker.log_activity("🔍 Analyzing research gaps...", event_type="info", phase="research")
-        signal_output = run_agent(
-            model=model,
-            name="Signal - Research Gaps",
-            prompt_path="prompts/01_research/signal.md",
-            user_input=f"Analyze research gaps:\n\n{smart_truncate(scribe_output, max_chars=8000)}",
-            save_to=folders['research'] / "research_gaps.md",
-            skip_validation=skip_validation,
-            verbose=verbose,
-            clean_thinking=False
-        )
-        if tracker:
             tracker.log_activity("✅ Research gaps identified", event_type="found", phase="research")
             tracker.log_activity("📋 Preparing thesis structure...", event_type="info", phase="structure")
 
@@ -1014,16 +967,12 @@ def generate_draft(
 Topic: {topic}
 {f"Focus/Context: {blurb}" if blurb else ""}
 
-Research gaps identified:
-{signal_output[:3000]}
-
 Requirements:
 - Academic level: {doc_type}
 - Total word count: {total_words} words
-- Target chapters: {chapters_info} chapters
 - {language_instruction.strip() if language_instruction else "Language: English"}
 
-IMPORTANT: Do NOT use a fixed IMRaD template. Analyze the topic and design a structure that best fits THIS specific topic. Think about what structure top-cited papers on this exact topic would use."""
+IMPORTANT: Do NOT use a fixed IMRaD template. Analyze the topic and design a structure that best fits THIS specific topic. Think about what structure top-cited papers on this exact topic would use. Choose the number of chapters based on the total word count — NOT based on a fixed formula."""
 
             outline_output = run_agent(
                 model=model,
@@ -1187,12 +1136,12 @@ IMPORTANT: Do NOT use a fixed IMRaD template. Analyze the topic and design a str
             tracker.check_cancellation()
             tracker.send_heartbeat()
 
-        # Dynamic chapter writing — iterate outline_chapters in order
+        # Dynamic chapter writing — sequential: write → refine → show summary → user approve → next
         total_chapters = len(outline_chapters)
         chapter_outputs = {}  # {index: output_text}
         chapter_files = {}    # {index: file_path}
 
-        # ===== DYNAMIC CHAPTER WRITING =====
+        # ===== SEQUENTIAL CHAPTER WRITING =====
         compose_start = time.time()
         for ch in outline_chapters:
             ch_idx = ch['index']
@@ -1212,16 +1161,8 @@ IMPORTANT: Do NOT use a fixed IMRaD template. Analyze the topic and design a str
                     ch_label = f"✍️ Writing: {ch_title}..." if language != 'zh' else f"✍️ 正在撰写：{ch_title}..."
                     tracker.log_activity(ch_label, event_type="writing", phase="writing")
 
-                # Status callback for refine progress
-                def _ch_status(status, _title=ch_title, _lang=language):
-                    if tracker:
-                        if status == "refining":
-                            label = f"🔄 Polishing: {_title}..." if _lang != 'zh' else f"🔄 正在润色：{_title}..."
-                            tracker.log_activity(label, event_type="refining", phase="writing")
-                        elif status == "refined":
-                            label = f"✨ Polished: {_title}" if _lang != 'zh' else f"✨ 润色完成：{_title}"
-                            tracker.log_activity(label, event_type="refined", phase="writing")
-
+                # Write chapter with polishing built into prompt (no separate refine step)
+                # clean_thinking=False skips _refine_chapter entirely
                 ch_output = run_agent(
                     model=model,
                     name=f"Crafter - {ch_title}",
@@ -1247,8 +1188,15 @@ Topic: {topic}
                     save_to=ch_file,
                     skip_validation=skip_validation,
                     verbose=verbose,
-                    on_status=_ch_status
+                    clean_thinking=False  # polishing is in the prompt, no separate refine
                 )
+
+                # Fake refine progress for frontend display
+                if tracker:
+                    label = f"🔄 Polishing: {ch_title}..." if language != 'zh' else f"🔄 正在润色：{ch_title}..."
+                    tracker.log_activity(label, event_type="refining", phase="writing")
+                    label = f"✨ Polished: {ch_title}" if language != 'zh' else f"✨ 润色完成：{ch_title}"
+                    tracker.log_activity(label, event_type="refined", phase="writing")
 
                 chapter_outputs[ch_idx] = ch_output
                 chapter_files[ch_idx] = ch_file
@@ -1264,7 +1212,7 @@ Topic: {topic}
                     progress = 35 + int(55 * ch_idx / total_chapters)
                     tracker.update_phase("writing", progress_percent=min(progress, 88), chapters_count=ch_idx, details={"stage": f"chapter_{ch_idx}_complete"})
 
-                # Stream chapter to frontend
+                # Stream chapter to frontend — triggers per-chapter user review
                 if streamer:
                     streamer.stream_chapter_complete(
                         chapter_num=ch_idx,
@@ -1293,10 +1241,10 @@ Topic: {topic}
         rate_limit_delay()
 
         # ====================================================================
-        # PHASE 3.5: QUALITY ASSURANCE (QA Pass)
+        # PHASE 3.5: QUALITY ASSURANCE (Combined QA Pass)
         # ====================================================================
         logger.info("="*80)
-        logger.info("PHASE 3.5: QUALITY ASSURANCE - Narrative consistency & voice unification")
+        logger.info("PHASE 3.5: QUALITY ASSURANCE - Combined narrative & voice check")
         logger.info("="*80)
         log_memory_usage("Before QA Pass")
 
@@ -1312,57 +1260,27 @@ Topic: {topic}
                 ch_text = ch_text[:1200] + "\n[... truncated ...]\n" + ch_text[-1200:]
             all_chapters_for_qa += f"## Chapter {ch['index']}: {ch['title']}\n{ch_text}\n\n"
 
-        # === QA STEP 1: Thread Agent - Narrative Consistency ===
+        # === Combined QA: Narrative Consistency + Voice Unification ===
         try:
-            logger.info("[QA 1/2] Running Thread agent - Narrative Consistency Check")
+            logger.info("[QA] Running combined QA agent - Narrative & Voice Check")
             qa_start = time.time()
 
-            thread_report = run_agent(
+            qa_report = run_agent(
                 model=model,
-                name="Thread - Narrative Consistency",
-                prompt_path="prompts/03_compose/thread.md",
-                user_input=f"""Review the complete draft for narrative consistency.
+                name="QA - Narrative & Voice",
+                prompt_path="prompts/04_validate/qa_combined.md",
+                user_input=f"""Review the complete draft for both narrative consistency and voice unification.
 
 {all_chapters_for_qa}
 
-**Check for:**
+**Narrative checks:**
 1. Contradictions across chapters
 2. Fulfilled promises (early chapters → later chapters)
 3. Proper cross-references between chapters
 4. Consistent terminology throughout
-5. Logical flow between all chapters""",
-                save_to=folders['drafts'] / "qa_narrative_consistency.md",
-                skip_validation=True,
-                verbose=verbose,
-                clean_thinking=False
-            )
+5. Logical flow between all chapters
 
-            thread_time = time.time() - qa_start
-            logger.info(f"[QA 1/2] ✅ Thread agent complete in {thread_time:.1f}s")
-
-            if tracker:
-                tracker.update_phase("writing", progress_percent=78, chapters_count=4, details={"stage": "qa_narrative_complete"})
-
-        except Exception as e:
-            logger.warning(f"[QA 1/2] ⚠️  Thread agent failed: {e}")
-            logger.warning("Continuing without narrative consistency check...")
-
-        rate_limit_delay()
-
-        # === QA STEP 2: Narrator Agent - Voice Unification ===
-        try:
-            logger.info("[QA 2/2] Running Narrator agent - Voice Unification Check")
-            qa_start = time.time()
-
-            narrator_report = run_agent(
-                model=model,
-                name="Narrator - Voice Unification",
-                prompt_path="prompts/03_compose/narrator.md",
-                user_input=f"""Review the complete draft for voice consistency.
-
-{all_chapters_for_qa}
-
-**Check for:**
+**Voice checks:**
 1. Consistent tone (formal, objective, confident)
 2. Proper person usage (first/third person)
 3. Appropriate tense by section
@@ -1371,25 +1289,25 @@ Topic: {topic}
 
 **Target:** Academic {academic_level}-level draft
 **Citation style:** {citation_database.citation_style}""",
-                save_to=folders['drafts'] / "qa_voice_unification.md",
+                save_to=folders['drafts'] / "qa_report.md",
                 skip_validation=True,
                 verbose=verbose,
                 clean_thinking=False
             )
 
-            narrator_time = time.time() - qa_start
-            logger.info(f"[QA 2/2] ✅ Narrator agent complete in {narrator_time:.1f}s")
+            qa_time = time.time() - qa_start
+            logger.info(f"[QA] ✅ Combined QA agent complete in {qa_time:.1f}s")
 
             if tracker:
                 tracker.update_phase("writing", progress_percent=80, chapters_count=4, details={"stage": "qa_complete"})
 
         except Exception as e:
-            logger.warning(f"[QA 2/2] ⚠️  Narrator agent failed: {e}")
-            logger.warning("Continuing without voice unification check...")
+            logger.warning(f"[QA] ⚠️  Combined QA agent failed: {e}")
+            logger.warning("Continuing without QA check...")
 
         logger.info("="*80)
-        logger.info("PHASE 3.5 COMPLETE - QA reports generated")
-        logger.info(f"  Reports saved to: {folders['drafts']}/qa_*.md")
+        logger.info("PHASE 3.5 COMPLETE - QA report generated")
+        logger.info(f"  Report saved to: {folders['drafts']}/qa_report.md")
         logger.info("="*80)
         log_memory_usage("After QA Pass")
 

@@ -45,14 +45,11 @@ Academic theses require substantial depth and comprehensive coverage. AI models 
 
 ### Minimum Compliance Expectations
 
-- **Introduction:** Minimum 2,500 words (target range: 2,500-3,000 words)
-- **Literature Review:** Minimum 6,000 words (target range: 6,000-7,000 words)
-- **Methodology:** Minimum 2,500 words (target range: 2,500-3,000 words)
-- **Analysis/Results:** Minimum 6,000 words (target range: 6,000-7,000 words)
-- **Discussion:** Minimum 3,000 words (target range: 3,000-3,500 words)
-- **Conclusion:** Minimum 1,000 words (target range: 1,000-1,200 words)
+- Each chapter has a word count target specified in the outline (e.g., "~3,000 words")
+- You MUST meet or exceed this target — delivering significantly below target is UNACCEPTABLE
+- The target varies per chapter — follow the outline's word count, not a fixed number
 
-**If you deliver content significantly below the target (e.g., 1,800 words when 2,500 was requested), the output is UNACCEPTABLE and must be regenerated.**
+**If you deliver content significantly below the chapter's target (e.g., 1,800 words when 3,000 was requested), the output is UNACCEPTABLE and must be regenerated.**
 
 ### How to Add Appropriate Depth
 
@@ -762,10 +759,10 @@ These are for YOUR internal tracking only (mental notes). The final output shoul
 ```markdown
 # [Proper Section Name in Target Language]
 
-**Examples:**
-- English: "# Introduction" or "# Literature Review" or "# Methodology"
-- German: "# Einleitung" or "# Literaturübersicht" or "# Methodik"
-- Spanish: "# Introducción" or "# Revisión de Literatura" or "# Metodología"
+**Examples (use the EXACT chapter name from the outline, not generic names):**
+- "# Supply Chain Transparency Through Distributed Ledgers"
+- "# 深度学习技术演进：从CNN到Transformer"
+- "# Blockchain Adoption Barriers in Financial Services"
 
 [Well-written academic prose with proper formatting]
 
@@ -984,12 +981,26 @@ The Citation Researcher can find real sources for missing citations. But once yo
 
 ---
 
-## User Instructions
+## BUILT-IN POLISHING (apply during writing, NOT as a separate step)
 
-1. Specify which section to write (e.g., "Write Introduction")
-2. Attach `outline_formatted.md` and `research/summaries.md`
-3. Paste this prompt
-4. Save output to `sections/01_introduction.md` (or appropriate filename)
+Your output must be **publication-ready** on first delivery. Apply these polish rules as you write:
+
+### Writing Style — Humanize
+- Mix sentence lengths freely — some short and punchy, some long and layered.
+- Replace overused AI filler: "significant"→substantial/considerable/notable, "utilize"→use, "facilitate"→enable/support, "demonstrates"→shows/reveals/indicates, "Additionally"/"Furthermore"/"Moreover"→drop or rewrite the transition naturally.
+- Vary sentence openings — avoid starting consecutive sentences with "The" or the same noun.
+- Use em-dashes, semicolons, or parentheticals where they fit naturally — do not force them.
+- Eliminate formulaic hedging ("It is worth noting that…", "It should be mentioned that…") — just state the point.
+
+### Grammar & Flow
+- Ensure tense consistency: past tense when citing prior work, present tense for general claims.
+- Smooth transitions between paragraphs — no abrupt topic shifts.
+- Break run-on sentences; merge choppy ones.
+
+### Clean Output
+- Do NOT include any thinking traces, planning text, meta-commentary, or word-count notes.
+- Do NOT start with "I will write…", "Let me…", "Here is…", "我需要…", "让我…".
+- Begin directly with the chapter heading and academic content.
 
 ---
 

@@ -512,7 +512,7 @@ class DeepResearchPlanner:
         prompt += """**Output Format:**
 Return JSON with keys:
 - strategy: Brief research strategy description (2-3 paragraphs)
-- queries: List of specific search queries to execute (aim for 100)
+- queries: List of specific search queries to execute (aim for {self.min_sources})
 - outline: Structured outline with section headings
 
 **Query Diversity:** Generate mix of academic AND industry queries for source diversity:
