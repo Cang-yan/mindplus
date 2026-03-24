@@ -503,7 +503,7 @@ module.exports = async function opendraftRoutes(fastify) {
         const shouldFallback = upstream.status === 404 && i < triedPaths.length - 1
         if (!shouldFallback) break
 
-        fastify.log.warn(
+        fastify.log.debug(
           {
             upstream: context.name,
             method,
@@ -795,7 +795,7 @@ module.exports = async function opendraftRoutes(fastify) {
     })
   })
 
-  fastify.get('/status/:jobId', tokenAuth, async (req, reply) => {
+  fastify.get('/status/:jobId', { ...tokenAuth, logLevel: 'warn' }, async (req, reply) => {
     const jobId = encodeURIComponent(String(req.params?.jobId || '').trim())
     if (!jobId) return reply.code(400).send(makeErrorPayload(400, 'jobId 不能为空'))
     return proxyJson(req, reply, 'GET', `/api/status/${jobId}`, {
@@ -911,7 +911,7 @@ module.exports = async function opendraftRoutes(fastify) {
     return proxyJson(req, reply, 'POST', `/api/approve/${jobId}`, { ...legacyProxyOptions })
   })
 
-  fastify.get('/legacy/status/:jobId', tokenAuth, async (req, reply) => {
+  fastify.get('/legacy/status/:jobId', { ...tokenAuth, logLevel: 'warn' }, async (req, reply) => {
     const jobId = encodeURIComponent(String(req.params?.jobId || '').trim())
     if (!jobId) return reply.code(400).send(makeErrorPayload(400, 'jobId 不能为空'))
     return proxyJson(req, reply, 'GET', `/api/status/${jobId}`, { ...legacyProxyOptions })

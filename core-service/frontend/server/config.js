@@ -157,17 +157,6 @@ module.exports = {
       process.env.VITE_AIPPT_API_PREFIX,
       '/docmee/v1/api/ppt'
     ),
-    genApiPrefix: normalizePathPrefix(
-      process.env.AIPPT_PPT_JSON_API_PREFIX ||
-      process.env.PPT_JSON_API_PREFIX ||
-      process.env.AIPPT_GEN_API_PREFIX ||
-      process.env.PPT_GEN_API_PREFIX ||
-      process.env.VITE_PPT_GEN_API_PREFIX ||
-      process.env.VITE_AIPPT_PPT_GEN_API_PREFIX ||
-      process.env.VITE_PPT_JSON_API_PREFIX ||
-      process.env.VITE_AIPPT_PPT_JSON_API_PREFIX,
-      '/docmee/v1/api/pptjson'
-    ),
   },
 
   // OpenAI-compatible AI proxy (for /ai/trial/stream)

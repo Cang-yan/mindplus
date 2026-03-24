@@ -35,7 +35,6 @@ window.__APP_CONFIG__ = {
   VITE_PPT_BASE_URL: '',
   APP_PPT_API_KEY: '',
   VITE_PPT_API_PREFIX: '',
-  VITE_PPT_GEN_API_PREFIX: '',
 
   // ── 图片搜索 API 密钥 ──────────────────────────────────────────────────
   APP_GIPHY_API_KEY: '',

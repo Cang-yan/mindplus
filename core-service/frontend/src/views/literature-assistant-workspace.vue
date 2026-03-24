@@ -103,7 +103,7 @@
             </div>
             <div class="sf-section">
               <div class="sf-section-title" data-i18n="output_formats">输出格式</div>
-              <div class="sf-formats"><label><input type="checkbox" class="fmt-check" value="pdf" checked> PDF</label><label><input type="checkbox" class="fmt-check" value="docx" checked> Word</label><label><input type="checkbox" class="fmt-check" value="md" checked> Markdown</label></div>
+              <div class="sf-formats"><label><input type="checkbox" class="fmt-check" value="docx" checked> Word</label><label><input type="checkbox" class="fmt-check" value="md" checked> Markdown</label></div>
             </div>
             <div class="sf-section">
               <div class="sf-section-title" data-i18n="extra_desc">补充说明（可选）</div>
@@ -121,7 +121,6 @@
             </div>
             <div class="panel-right-actions">
               <button class="btn-action" id="btn-save" type="button" @click="saveEdits" disabled data-i18n="btn_save">保存</button>
-              <button class="btn-action" id="btn-print" type="button" @click="openPreview" disabled data-i18n="btn_print">打印 / PDF</button>
             </div>
           </div>
           <div id="preview-area"><div class="placeholder"><div class="placeholder-icon">&#9997;</div><div data-i18n="placeholder_wait">请先完成左侧论文设置...</div></div></div>
@@ -131,7 +130,6 @@
             <span data-i18n="dl_success">论文生成成功！</span>
             <button class="btn-dl secondary" id="dl-md" type="button" @click="downloadFile('md')">Markdown</button>
             <button class="btn-dl secondary" id="dl-docx" type="button" @click="downloadFile('docx')">Word</button>
-            <button class="btn-dl" id="dl-pdf" type="button" @click="downloadFile('pdf')" data-i18n="dl_pdf">下载 PDF</button>
           </div>
         </div>
       </div>
@@ -184,7 +182,7 @@ const I18N = {
     approve_chapter:'确认章节，继续下一步',
     my_papers_btn:'&#128196; 我的论文', my_papers_title:'我的论文',
     new_paper_btn:'+ 新的论文',
-    paper_status_done:'已完成', paper_status_running:'撰写中', paper_status_error:'出错',
+    paper_status_done:'已完成', paper_status_running:'撰写中', paper_status_error:'出错', paper_status_cancelled:'已取消',
     papers_empty:'还没有论文，点击上方"新的论文"开始创作吧！',
     paper_created:'创建于',
     ai_thinking:'AI 正在思考',
@@ -237,7 +235,7 @@ const I18N = {
     approve_chapter:'Approve & Continue Next',
     my_papers_btn:'&#128196; My Papers', my_papers_title:'My Papers',
     new_paper_btn:'+ New Paper',
-    paper_status_done:'Completed', paper_status_running:'Writing', paper_status_error:'Error',
+    paper_status_done:'Completed', paper_status_running:'Writing', paper_status_error:'Error', paper_status_cancelled:'Cancelled',
     papers_empty:'No papers yet. Click "New Paper" above to start!',
     paper_created:'Created',
     ai_thinking:'AI is thinking',
@@ -668,8 +666,12 @@ function isFailedJobStatus(status) {
   return FAILED_JOB_STATUS.has(normalizeJobStatus(status))
 }
 
+function isCancelledJobStatus(status) {
+  return normalizeJobStatus(status) === 'cancelled'
+}
+
 function canOpenJobStatus(status) {
-  return !isFailedJobStatus(status)
+  return normalizeJobStatus(status) === 'done'
 }
 
 function collapseFailedPapers(papers) {
@@ -869,8 +871,12 @@ function renderPapersList(papers) {
   }
   grid.innerHTML = papers.map(p => {
     const safeStatus = normalizeJobStatus(p.status)
-    const statusCls = safeStatus === 'done' ? 'done' : (isFailedJobStatus(safeStatus) ? 'error' : 'running');
-    const statusText = t('paper_status_' + (safeStatus === 'done' ? 'done' : isFailedJobStatus(safeStatus) ? 'error' : 'running'));
+    const isDone = safeStatus === 'done'
+    const isFailed = isFailedJobStatus(safeStatus)
+    const isCancelled = isCancelledJobStatus(safeStatus)
+    const statusKey = isDone ? 'done' : (isFailed ? 'error' : (isCancelled ? 'cancelled' : 'running'))
+    const statusCls = statusKey
+    const statusText = t('paper_status_' + statusKey);
     const date = new Date((p.created_at || 0) * 1000);
     const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
     const clickable = canOpenJobStatus(safeStatus)
@@ -897,27 +903,19 @@ async function deletePaper(jobId) {
 function openPaper(jobId, encodedTopic, status) {
   const topic = decodeURIComponent(encodedTopic);
   const safeStatus = normalizeJobStatus(status);
-  if (!canOpenJobStatus(safeStatus)) return
-  if (safeStatus === 'done') {
-    // Open completed paper in workspace
-    currentJobId = jobId;
-    setJobStatus(safeStatus)
-    showWorkspace(topic, true);
-    // Try to load content
-    loadPaperContent();
-    updateProgress(100);
-    finalizeAllPhases();
-    document.getElementById('ws-dot').classList.add('done');
-    document.getElementById('ws-status-text').textContent = t('status_complete');
-    document.getElementById('download-bar').classList.add('show');
-  } else {
-    // Running paper - reconnect
-    currentJobId = jobId;
-    setJobStatus(safeStatus || 'running')
-    showWorkspace(topic, true);
-    startTime = Date.now(); startTimer();
-    connectSSE();
-  }
+  if (!canOpenJobStatus(safeStatus)) return false
+  // Open completed paper in workspace
+  currentJobId = jobId;
+  setJobStatus(safeStatus)
+  showWorkspace(topic, true);
+  // Try to load content
+  loadPaperContent();
+  updateProgress(100);
+  finalizeAllPhases();
+  document.getElementById('ws-dot').classList.add('done');
+  document.getElementById('ws-status-text').textContent = t('status_complete');
+  document.getElementById('download-bar').classList.add('show');
+  return true
 }
 function newPaper() {
   showLanding();
@@ -1045,7 +1043,7 @@ function getParams() {
     location: document.getElementById('sf-location').value || null,
     student_id: document.getElementById('sf-studentid').value || null,
     blurb: document.getElementById('sf-blurb').value || null,
-    formats: formats.length ? formats : ['pdf','docx','md'],
+    formats: formats.length ? formats : ['docx', 'md'],
   };
 }
 
@@ -1231,7 +1229,6 @@ function showWorkspace(topic, skipSettings) {
   if (sectionsToggleBtn) sectionsToggleBtn.textContent = '▲';
   hideApprovalCard();
   document.getElementById('btn-save').disabled = true;
-  document.getElementById('btn-print').disabled = true;
   document.getElementById('ws-dot').className = 'status-dot';
   document.getElementById('ws-status-text').textContent = t('status_processing');
   updateProgress(0);
@@ -1391,7 +1388,7 @@ function switchRightTab(tab) {
 }
 async function loadPaperContent() {
   if(!currentJobId) return;
-  try { const r=await fetch(apiUrl(`/md/${encodeURIComponent(currentJobId)}`)); if(!r.ok)return; const d=await r.json(); if(!d.content)return; mdContent=d.content; renderPreview(mdContent); document.getElementById('md-editor').value=mdContent; document.getElementById('btn-save').disabled=false; document.getElementById('btn-print').disabled=false; } catch(e){console.error(e);}
+  try { const r=await fetch(apiUrl(`/md/${encodeURIComponent(currentJobId)}`)); if(!r.ok)return; const d=await r.json().catch(() => ({})); if(!d.content)return; mdContent=d.content; renderPreview(mdContent); document.getElementById('md-editor').value=mdContent; document.getElementById('btn-save').disabled=false; } catch(e){console.error(e);}
 }
 function renderPreview(md) {
   let h = md;
@@ -1469,8 +1466,10 @@ async function saveEdits() {
   const content=document.getElementById('md-editor').value;
   try{const r=await fetch(apiUrl(`/save/${encodeURIComponent(currentJobId)}`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content})}); const d=await r.json(); if(d.ok){mdContent=content;renderPreview(content);const b=document.getElementById('btn-save');b.textContent=t('btn_saved');setTimeout(()=>b.textContent=t('btn_save'),1500);}}catch(e){alert('Save failed: '+e.message);}
 }
-function openPreview() { if(currentJobId) window.open(apiUrl(`/preview/${encodeURIComponent(currentJobId)}`),'_blank'); }
-function downloadFile(fmt) { if(currentJobId) window.open(apiUrl(`/download/${encodeURIComponent(currentJobId)}/${encodeURIComponent(fmt)}`),'_blank'); }
+function downloadFile(fmt) {
+  if (!currentJobId || (fmt !== 'docx' && fmt !== 'md')) return
+  window.open(apiUrl(`/download/${encodeURIComponent(currentJobId)}/${encodeURIComponent(fmt)}`),'_blank')
+}
 
 let currentSectionName = '';
 
@@ -1525,12 +1524,10 @@ async function loadSection(sectionName) {
 }
 
 function setDownloadButtonsVisibility(data = {}) {
-  const pdfBtn = document.getElementById('dl-pdf')
-  const docxBtn = document.getElementById('dl-docx')
   const mdBtn = document.getElementById('dl-md')
-  if (pdfBtn) pdfBtn.style.display = data.pdf ? '' : 'none'
-  if (docxBtn) docxBtn.style.display = data.docx ? '' : 'none'
+  const docxBtn = document.getElementById('dl-docx')
   if (mdBtn) mdBtn.style.display = data.md ? '' : 'none'
+  if (docxBtn) docxBtn.style.display = data.docx ? '' : 'none'
 }
 
 function handleTerminalStatus(data = {}) {
@@ -1739,8 +1736,7 @@ async function tryOpenJobFromQuery() {
 
     const encodedTopic = encodeURIComponent(String(target?.topic || ''))
     const safeStatus = String(target?.status || 'running')
-    openPaper(queryJobId, encodedTopic, safeStatus)
-    return true
+    return openPaper(queryJobId, encodedTopic, safeStatus)
   } catch (error) {
     console.error('open job from query failed:', error)
     return false
@@ -1813,7 +1809,6 @@ const windowActionBindings = {
   goBack,
   switchRightTab,
   saveEdits,
-  openPreview,
   downloadFile,
   toggleSectionsPanel,
   toggleExpand,
@@ -2099,6 +2094,7 @@ onBeforeUnmount(() => {
 .paper-status-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
 .paper-status-dot.done { background:var(--green); }
 .paper-status-dot.running { background:var(--yellow); animation:pulse 1.5s infinite; }
+.paper-status-dot.cancelled { background:#94a3b8; }
 .paper-status-dot.error { background:#ef4444; }
 .paper-info { flex:1; min-width:0; }
 .paper-info .paper-topic { font-weight:600; font-size:0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }

@@ -296,7 +296,7 @@ const handleDeleteWork = async (work) => {
   try {
     deletingWorkId.value = targetId
     if (work?.workType === WORK_TYPE_AIPPT) {
-      const removed = deletePptGenerationRecord(targetId)
+      const removed = await deletePptGenerationRecord(targetId)
       if (!removed) {
         throw new Error('aippt record not found')
       }

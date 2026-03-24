@@ -97,6 +97,9 @@ class CitationResearcher:
         enable_smart_routing: bool = True,
         verbose: bool = True,
         progress_callback: Optional[Callable[[str, str], None]] = None,
+        crossref_rate_limit_per_second: Optional[float] = None,
+        crossref_timeout: Optional[int] = None,
+        crossref_max_retries: Optional[int] = None,
     ):
         """
         Initialize Citation Researcher.
@@ -110,6 +113,9 @@ class CitationResearcher:
             enable_smart_routing: Whether to use smart query routing (default: True)
             verbose: Whether to print progress
             progress_callback: Optional callback(message, event_type) for progress reporting
+            crossref_rate_limit_per_second: Optional Crossref rate limit override
+            crossref_timeout: Optional Crossref timeout override (seconds)
+            crossref_max_retries: Optional Crossref retry override
         """
         self.gemini_model = gemini_model
         self.progress_callback = progress_callback
@@ -122,7 +128,14 @@ class CitationResearcher:
 
         # Initialize API clients
         if self.enable_crossref:
-            self.crossref = CrossrefClient()
+            crossref_kwargs: Dict[str, Any] = {}
+            if crossref_rate_limit_per_second is not None:
+                crossref_kwargs['rate_limit_per_second'] = float(crossref_rate_limit_per_second)
+            if crossref_timeout is not None:
+                crossref_kwargs['timeout'] = int(crossref_timeout)
+            if crossref_max_retries is not None:
+                crossref_kwargs['max_retries'] = int(crossref_max_retries)
+            self.crossref = CrossrefClient(**crossref_kwargs)
         if self.enable_semantic_scholar:
             self.semantic_scholar = SemanticScholarClient()
         if self.enable_gemini_grounded:

@@ -88,6 +88,55 @@ module.exports = async function aipptRoutes(fastify) {
     }
   }
 
+  function isPrivateIpv4Host(hostname) {
+    const parts = String(hostname || '').trim().split('.')
+    if (parts.length !== 4) return false
+    const octets = parts.map(part => Number(part))
+    if (octets.some(n => !Number.isInteger(n) || n < 0 || n > 255)) return false
+
+    const [first, second] = octets
+    if (first === 10 || first === 127) return true
+    if (first === 192 && second === 168) return true
+    if (first === 172 && second >= 16 && second <= 31) return true
+    if (first === 169 && second === 254) return true
+    return false
+  }
+
+  function shouldBypassEnvProxy(url) {
+    try {
+      const parsed = new URL(String(url || ''))
+      const hostname = String(parsed.hostname || '').trim().toLowerCase()
+      if (!hostname) return false
+      if (hostname === 'localhost' || hostname === '::1') return true
+      if (hostname.endsWith('.local') || hostname.endsWith('.lan') || hostname.endsWith('.internal')) return true
+      if (isPrivateIpv4Host(hostname)) return true
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  function resolveAxiosProxyOption(url) {
+    return shouldBypassEnvProxy(url) ? false : undefined
+  }
+
+  function buildUpstreamUnavailableMessage(error) {
+    const code = String(error?.code || error?.cause?.code || '').trim().toUpperCase()
+    if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') {
+      return 'AiPPT 上游连接超时，请检查服务器网络或代理配置后重试'
+    }
+    if (code === 'EAI_AGAIN' || code === 'ENOTFOUND') {
+      return 'AiPPT 上游域名解析失败，请检查 DNS 或代理配置后重试'
+    }
+    if (code === 'ECONNRESET') {
+      return 'AiPPT 上游连接被重置，请稍后重试'
+    }
+    if (code === 'ECONNREFUSED') {
+      return 'AiPPT 上游拒绝连接，请稍后重试'
+    }
+    return 'AiPPT 上游服务不可用，请稍后重试'
+  }
+
   async function readStreamAsString(stream) {
     return new Promise((resolve, reject) => {
       const chunks = []
@@ -104,6 +153,7 @@ module.exports = async function aipptRoutes(fastify) {
     if (!url) {
       return reply.code(500).send({ code: 500, data: null, message: 'AiPPT 上游地址无效' })
     }
+    const proxyOption = resolveAxiosProxyOption(url)
 
     try {
       const upstream = await axios.request({
@@ -114,7 +164,7 @@ module.exports = async function aipptRoutes(fastify) {
         headers: buildUpstreamHeaders({ Accept: 'text/event-stream' }),
         responseType: 'stream',
         timeout: AIPPT_UPSTREAM_TIMEOUT_MS,
-        proxy: false,
+        proxy: proxyOption,
         validateStatus: () => true,
       })
 
@@ -142,11 +192,12 @@ module.exports = async function aipptRoutes(fastify) {
       })
       return reply.send(upstream.data)
     } catch (error) {
-      fastify.log.error({ err: error }, 'AiPPT SSE proxy failed')
+      const message = buildUpstreamUnavailableMessage(error)
+      fastify.log.error({ err: error, url, proxy: proxyOption }, 'AiPPT SSE proxy failed')
       return reply.code(502).send({
         code: 502,
         data: null,
-        message: 'AiPPT 上游服务不可用，请稍后重试',
+        message,
       })
     }
   }
@@ -155,11 +206,12 @@ module.exports = async function aipptRoutes(fastify) {
     if (!ensureAipptProxyConfigured(reply)) return
 
     const method = String(options.method || 'POST').toUpperCase()
-    const prefix = options.gen ? config.aippt.genApiPrefix : config.aippt.apiPrefix
+    const prefix = config.aippt.apiPrefix
     const url = buildUpstreamUrl(prefix, options.path || '')
     if (!url) {
       return reply.code(500).send({ code: 500, data: null, message: 'AiPPT 上游地址无效' })
     }
+    const proxyOption = resolveAxiosProxyOption(url)
 
     const payload = method === 'GET' || method === 'HEAD'
       ? undefined
@@ -174,7 +226,7 @@ module.exports = async function aipptRoutes(fastify) {
         headers: buildUpstreamHeaders(),
         responseType: 'arraybuffer',
         timeout: AIPPT_UPSTREAM_TIMEOUT_MS,
-        proxy: false,
+        proxy: proxyOption,
         validateStatus: () => true,
       })
 
@@ -209,11 +261,12 @@ module.exports = async function aipptRoutes(fastify) {
       }
       return reply.code(upstream.status).send(buffer)
     } catch (error) {
-      fastify.log.error({ err: error }, 'AiPPT proxy request failed')
+      const message = buildUpstreamUnavailableMessage(error)
+      fastify.log.error({ err: error, url, proxy: proxyOption }, 'AiPPT proxy request failed')
       return reply.code(502).send({
         code: 502,
         data: null,
-        message: 'AiPPT 上游服务不可用，请稍后重试',
+        message,
       })
     }
   }
@@ -332,7 +385,7 @@ module.exports = async function aipptRoutes(fastify) {
   `)
 
   // ── AiPPT upstream relay（前端无密钥模式） ─────────────────────────────────
-  // 统一使用 /api/aippt/ppt/* 与 /api/aippt/pptjson/*。
+  // 统一使用 /api/aippt/ppt/*。
   function registerUpstreamRelayRoutes(pathPrefix = '') {
     const prefix = String(pathPrefix || '').replace(/\/+$/, '')
 
@@ -354,14 +407,6 @@ module.exports = async function aipptRoutes(fastify) {
 
     fastify.post(`${prefix}/ppt/downloadPptx`, auth, async (req, reply) => {
       return proxyPptBuffer(req, reply, { method: 'POST', path: '/downloadPptx' })
-    })
-
-    fastify.post(`${prefix}/pptjson`, auth, async (req, reply) => {
-      return proxyPptBuffer(req, reply, { method: 'POST', gen: true, path: '' })
-    })
-
-    fastify.post(`${prefix}/pptjson/json2ppt`, auth, async (req, reply) => {
-      return proxyPptBuffer(req, reply, { method: 'POST', gen: true, path: '/json2ppt' })
     })
   }
 

@@ -70,13 +70,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Message } from '@arco-design/web-vue'
 import {
-  buildPptGenApiUrl,
   decodePptxProperty,
   downloadPptxById,
   fetchAsyncPptInfo,
   generateContentStream,
-  getAuthHeaders,
-  resolvePptGenApiMode,
 } from '@/api/main-ppt'
 import { loadExternalScripts } from '@/utils/loadExternalScripts'
 import {
@@ -98,7 +95,6 @@ const isDownloadingPpt = ref(false)
 const elapsedSeconds = ref(0)
 
 const insertElementValue = ref('')
-const downloadAnimationType = ref('')
 
 let contentStreamCancel = null
 const latestPptId = ref('')
@@ -677,54 +673,21 @@ async function handleDownloadPpt() {
     chargeResult = await chargeCredits('aippt_json2ppt', {
       recordId,
       slideCount: previewPages.value.length,
-      animationType: downloadAnimationType.value || 'default',
     })
 
-    const genMode = resolvePptGenApiMode()
-
-    if (genMode === 'downloadPptx') {
-      const pptId = String(record.value?.pptId || latestPptId.value || '').trim()
-      if (!pptId) {
-        throw new Error('当前下载通道需要 pptId，请先完成生成后再试')
-      }
-      const resp = await downloadPptxById(pptId)
-      const fileUrl = String(resp?.data?.fileUrl || '').trim()
-      if (!fileUrl) {
-        throw new Error('downloadPptx 未返回 fileUrl')
-      }
-      const link = document.createElement('a')
-      link.href = fileUrl
-      link.download = `${resp?.data?.subject || record.value?.topic || 'download'}.pptx`
-      link.click()
-      Message.success('已开始下载 PPT')
-      return
+    const pptId = String(record.value?.pptId || latestPptId.value || '').trim()
+    if (!pptId) {
+      throw new Error('当前下载通道需要 pptId，请先完成生成后再试')
     }
-
-    const animationType = ['1', '2'].includes(downloadAnimationType.value)
-      ? downloadAnimationType.value
-      : undefined
-    const response = await fetch(buildPptGenApiUrl('/json2ppt', { animationType }), {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(pptxObj.value),
-    })
-
-    if (!response.ok) {
-      throw new Error(`下载失败（HTTP ${response.status}）`)
+    const resp = await downloadPptxById(pptId)
+    const fileUrl = String(resp?.data?.fileUrl || '').trim()
+    if (!fileUrl) {
+      throw new Error('downloadPptx 未返回 fileUrl')
     }
-
-    const type = response.headers.get('content-type') || ''
-    if (type.includes('application/json')) {
-      const json = await response.json()
-      throw new Error(json?.message || json?.msg || '渲染失败')
-    }
-
-    const blob = await response.blob()
     const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `${record.value?.topic || 'download'}.pptx`
+    link.href = fileUrl
+    link.download = `${resp?.data?.subject || record.value?.topic || 'download'}.pptx`
     link.click()
-    URL.revokeObjectURL(link.href)
     Message.success('已开始下载 PPT')
   } catch (error) {
     if (chargeResult?.charged && chargeResult?.chargeId) {
@@ -740,7 +703,7 @@ async function handleDownloadPpt() {
         })
         Message.info('下载失败，credits 已回退')
       } catch (refundError) {
-        console.error('json2ppt refund failed:', refundError)
+        console.error('downloadPptx refund failed:', refundError)
         Message.warning('下载失败，credits 退款失败，请稍后重试')
       }
     }

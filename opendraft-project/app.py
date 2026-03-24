@@ -116,6 +116,100 @@ def _add_cors_headers(response: Response):
 _jobs: dict = {}
 _jobs_lock = threading.Lock()
 
+
+def _resolve_primary_markdown_path(
+    exports_dir: Path,
+    docx_path: Path | None = None,
+    pdf_path: Path | None = None,
+) -> Path | None:
+    """
+    Resolve the canonical markdown file for preview/download/save.
+
+    Priority:
+    1) <docx/pdf basename>.md (final draft companion)
+    2) Non-helper markdown files in exports (newest first)
+    3) Any markdown file in exports (newest first, last-resort fallback)
+    """
+    if not exports_dir.exists():
+        return None
+
+    # 1) Try deterministic companion path from generated document basename
+    for built_path in (docx_path, pdf_path):
+        if not built_path:
+            continue
+        candidate = exports_dir / f"{Path(built_path).stem}.md"
+        if candidate.exists():
+            return candidate
+
+    helper_files = {
+        'INTERMEDIATE_DRAFT.md',
+        '16_abstract_generated.md',
+        'abstract_english.md',
+    }
+
+    # 2) Prefer non-helper markdown files
+    preferred = [
+        f for f in exports_dir.glob('*.md')
+        if f.name not in helper_files
+    ]
+    if preferred:
+        preferred.sort(key=lambda p: (p.stat().st_mtime, p.name), reverse=True)
+        return preferred[0]
+
+    # 3) Fallback to any markdown file to avoid breaking existing jobs
+    fallback = list(exports_dir.glob('*.md'))
+    if not fallback:
+        return None
+    fallback.sort(key=lambda p: (p.stat().st_mtime, p.name), reverse=True)
+    return fallback[0]
+
+
+def _ensure_job_markdown_path(job: dict) -> Path | None:
+    """
+    Ensure job['md'] points to the primary draft markdown file.
+
+    This also repairs older jobs whose md path was mistakenly set to helper files
+    (e.g., abstract_english.md).
+    """
+    helper_files = {
+        'INTERMEDIATE_DRAFT.md',
+        '16_abstract_generated.md',
+        'abstract_english.md',
+    }
+
+    current_md_raw = job.get('md')
+    current_md = Path(current_md_raw) if current_md_raw else None
+
+    if current_md and current_md.exists() and current_md.name not in helper_files:
+        return current_md
+
+    docx_raw = job.get('docx')
+    pdf_raw = job.get('pdf')
+    docx_path = Path(docx_raw) if docx_raw else None
+    pdf_path = Path(pdf_raw) if pdf_raw else None
+
+    exports_dir = None
+    if current_md:
+        exports_dir = current_md.parent
+    elif docx_path:
+        exports_dir = docx_path.parent
+    elif pdf_path:
+        exports_dir = pdf_path.parent
+
+    if not exports_dir:
+        return current_md if current_md and current_md.exists() else None
+
+    resolved = _resolve_primary_markdown_path(
+        exports_dir=exports_dir,
+        docx_path=docx_path,
+        pdf_path=pdf_path,
+    )
+    if resolved and resolved.exists():
+        job['md'] = str(resolved)
+        return resolved
+
+    return current_md if current_md and current_md.exists() else None
+
 def _load_papers() -> list:
     rows = fetch_all(
         """
@@ -153,6 +247,65 @@ def _load_papers() -> list:
                 pass
         papers.append(base)
     return papers
+
+
+def _load_paper_by_job_id(job_id: str) -> dict | None:
+    row = fetch_one(
+        """
+        SELECT
+          job_id, topic, status, user_id, language, level,
+          extra_payload, created_at, updated_at
+        FROM opendraft_papers
+        WHERE job_id = %s
+        LIMIT 1
+        """,
+        [job_id],
+    )
+    if not row:
+        return None
+
+    base = {
+        'job_id': row.get('job_id'),
+        'topic': row.get('topic') or '',
+        'status': row.get('status') or 'running',
+        'created_at': float(row.get('created_at') or 0),
+        'updated_at': float(row.get('updated_at') or 0),
+    }
+    user_id = row.get('user_id')
+    if user_id:
+        base['user_id'] = str(user_id)
+    if row.get('language'):
+        base['language'] = row.get('language')
+    if row.get('level'):
+        base['level'] = row.get('level')
+
+    extra_payload = row.get('extra_payload')
+    if extra_payload:
+        try:
+            extra_data = json.loads(extra_payload)
+            if isinstance(extra_data, dict):
+                base.update(extra_data)
+        except Exception:
+            pass
+    return base
+
+
+def _normalize_job_status(value) -> str:
+    return str(value or '').strip().lower()
+
+
+def _is_terminal_job_status(value) -> bool:
+    return _normalize_job_status(value) in ('done', 'error', 'failed', 'cancelled')
+
+
+def _artifact_name(path_value) -> str | None:
+    raw = str(path_value or '').strip()
+    if not raw:
+        return None
+    try:
+        return Path(raw).name
+    except Exception:
+        return None
 
 def _normalize_user_id(value) -> str:
     if value is None:
@@ -242,9 +395,60 @@ def _get_owned_job(job_id: str, payload=None):
     with _jobs_lock:
         job = _jobs.get(job_id)
     if not job:
-        return None, request_user_id, (jsonify({'error': 'Job not found'}), 404)
+        # Fallback to persisted paper so completed history can be reopened
+        paper = _load_paper_by_job_id(job_id)
+        if not paper:
+            return None, request_user_id, (jsonify({'error': 'Job not found'}), 404)
+        if not _is_owner_match(paper.get('user_id'), request_user_id):
+            return None, request_user_id, (jsonify({'error': 'Forbidden'}), 403)
+
+        paper_status = _normalize_job_status(paper.get('status')) or 'running'
+        restored = {
+            'status': paper_status,
+            'log': [],
+            'steps': [],
+            'pdf': paper.get('pdf'),
+            'docx': paper.get('docx'),
+            'md': paper.get('md'),
+            'topic': str(paper.get('topic') or ''),
+            'start_time': float(paper.get('created_at') or _time.time()),
+            'outline': None,
+            'review_chapter': None,
+            'review_content': None,
+            'user_id': paper.get('user_id'),
+            'cancel_requested': paper_status == 'cancelled',
+            'cancel_reason': str(paper.get('cancel_reason') or ''),
+        }
+        if paper.get('language'):
+            restored['language'] = paper.get('language')
+        if paper.get('level'):
+            restored['level'] = paper.get('level')
+        if paper.get('error'):
+            restored['error'] = paper.get('error')
+
+        for fmt in ('pdf', 'docx', 'md'):
+            name_key = f'{fmt}_name'
+            if paper.get(name_key):
+                restored[name_key] = paper.get(name_key)
+            elif paper.get(fmt):
+                restored[name_key] = _artifact_name(paper.get(fmt))
+
+        with _jobs_lock:
+            existing = _jobs.get(job_id)
+            if existing:
+                job = existing
+            else:
+                _jobs[job_id] = restored
+                job = restored
     if not _is_owner_match(job.get('user_id'), request_user_id):
         return None, request_user_id, (jsonify({'error': 'Forbidden'}), 403)
+
+    # Backfill artifact filenames for older records.
+    for fmt in ('pdf', 'docx', 'md'):
+        name_key = f'{fmt}_name'
+        if job.get(name_key) or not job.get(fmt):
+            continue
+        job[name_key] = _artifact_name(job.get(fmt))
     return job, request_user_id, None
 
 def _upsert_paper(job_id: str, topic: str, status: str, **extra):
@@ -503,21 +707,30 @@ def _run_generation(job_id: str, params: dict):
         )
         _raise_if_cancel_requested()
 
-        # Find MD file
+        # Resolve canonical markdown file (avoid picking helper files like abstract_english.md)
         exports = output_dir / 'exports'
-        md_files = list(exports.glob('*.md'))
-        md_path = md_files[0] if md_files else None
+        md_path = _resolve_primary_markdown_path(
+            exports_dir=exports,
+            docx_path=docx_path,
+            pdf_path=pdf_path,
+        )
 
         with _jobs_lock:
             _jobs[job_id]['status'] = 'done'
             _jobs[job_id]['pdf'] = str(pdf_path) if pdf_path and pdf_path.exists() else None
             _jobs[job_id]['docx'] = str(docx_path) if docx_path and docx_path.exists() else None
             _jobs[job_id]['md'] = str(md_path) if md_path and md_path.exists() else None
+            _jobs[job_id]['pdf_name'] = _artifact_name(pdf_path) if pdf_path and pdf_path.exists() else None
+            _jobs[job_id]['docx_name'] = _artifact_name(docx_path) if docx_path and docx_path.exists() else None
+            _jobs[job_id]['md_name'] = _artifact_name(md_path) if md_path and md_path.exists() else None
             _upsert_paper(job_id, params.get('topic', ''), 'done',
                        user_id=params.get('uid') or params.get('user_id'),
                        pdf=str(pdf_path) if pdf_path and pdf_path.exists() else None,
                        docx=str(docx_path) if docx_path and docx_path.exists() else None,
-                       md=str(md_path) if md_path and md_path.exists() else None)
+                       md=str(md_path) if md_path and md_path.exists() else None,
+                       pdf_name=_artifact_name(pdf_path) if pdf_path and pdf_path.exists() else None,
+                       docx_name=_artifact_name(docx_path) if docx_path and docx_path.exists() else None,
+                       md_name=_artifact_name(md_path) if md_path and md_path.exists() else None)
 
     except JobCancelledError as e:
         with _jobs_lock:
@@ -845,14 +1058,14 @@ def preview(job_id):
     job, _, error_resp = _get_owned_job(job_id)
     if error_resp:
         return error_resp
-    md_path = job.get('md')
-    if not md_path or not Path(md_path).exists():
+    md_path = _ensure_job_markdown_path(job)
+    if not md_path or not md_path.exists():
         return jsonify({'error': 'Markdown file not available'}), 404
 
     import markdown as md_lib
     import re
 
-    raw = Path(md_path).read_text(encoding='utf-8')
+    raw = md_path.read_text(encoding='utf-8')
     meta = {}
     body = raw
     yaml_match = re.match(r'^---\n(.*?)\n---\n', raw, re.DOTALL)
@@ -915,7 +1128,11 @@ def download(job_id, fmt):
     job, _, error_resp = _get_owned_job(job_id)
     if error_resp:
         return error_resp
-    path = job.get(fmt)
+    if fmt == 'md':
+        md_path = _ensure_job_markdown_path(job)
+        path = str(md_path) if md_path else None
+    else:
+        path = job.get(fmt)
     if not path or not Path(path).exists():
         return jsonify({'error': f'{fmt.upper()} not available'}), 404
     return send_file(path, as_attachment=True)
@@ -927,10 +1144,10 @@ def get_md(job_id):
     job, _, error_resp = _get_owned_job(job_id)
     if error_resp:
         return error_resp
-    md_path = job.get('md')
-    if not md_path or not Path(md_path).exists():
+    md_path = _ensure_job_markdown_path(job)
+    if not md_path or not md_path.exists():
         return jsonify({'error': 'Markdown not available yet'}), 404
-    raw = Path(md_path).read_text(encoding='utf-8')
+    raw = md_path.read_text(encoding='utf-8')
     return jsonify({'content': raw})
 
 
@@ -941,11 +1158,11 @@ def save_md(job_id):
     job, _, error_resp = _get_owned_job(job_id, payload)
     if error_resp:
         return error_resp
-    md_path = job.get('md')
+    md_path = _ensure_job_markdown_path(job)
     if not md_path:
         return jsonify({'error': 'No markdown file'}), 404
     content = payload.get('content', '')
-    Path(md_path).write_text(content, encoding='utf-8')
+    md_path.write_text(content, encoding='utf-8')
     return jsonify({'ok': True})
 
 
@@ -1066,8 +1283,22 @@ def list_papers():
     with _jobs_lock:
         for p in papers:
             job = _jobs.get(p['job_id'])
-            if job and _is_owner_match(job.get('user_id'), request_user_id) and job['status'] not in ('done', 'error'):
-                p['status'] = job['status']
+            if not job or not _is_owner_match(job.get('user_id'), request_user_id):
+                continue
+            persisted_status = _normalize_job_status(p.get('status'))
+            runtime_status = _normalize_job_status(job.get('status'))
+            # Persisted terminal statuses should stay terminal in history list.
+            if _is_terminal_job_status(persisted_status):
+                continue
+            if runtime_status:
+                p['status'] = runtime_status
+
+    for p in papers:
+        for fmt in ('pdf', 'docx', 'md'):
+            name_key = f'{fmt}_name'
+            if p.get(name_key) or not p.get(fmt):
+                continue
+            p[name_key] = _artifact_name(p.get(fmt))
     return jsonify(papers)
 
 

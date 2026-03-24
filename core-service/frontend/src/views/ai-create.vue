@@ -135,20 +135,26 @@
         <div class="filter-block">
           <span>按风格筛选</span>
           <a-select v-model="styleFilter" allow-clear placeholder="全部风格" @change="onStyleFilterChange">
-            <a-option value="business">商务</a-option>
-            <a-option value="simple">极简</a-option>
-            <a-option value="creative">创意</a-option>
-            <a-option value="tech">科技</a-option>
+            <a-option
+              v-for="item in styleFilterOptions"
+              :key="`style-${item.value || 'all'}`"
+              :value="item.value"
+            >
+              {{ item.name }}
+            </a-option>
           </a-select>
         </div>
 
         <div class="filter-block">
           <span>按主题筛选</span>
           <a-select v-model="topicFilter" allow-clear placeholder="全部主题" @change="onTopicFilterChange">
-            <a-option value="report">汇报</a-option>
-            <a-option value="education">教育</a-option>
-            <a-option value="marketing">营销</a-option>
-            <a-option value="finance">金融</a-option>
+            <a-option
+              v-for="item in topicFilterOptions"
+              :key="`topic-${item.value || 'all'}`"
+              :value="item.value"
+            >
+              {{ item.name }}
+            </a-option>
           </a-select>
         </div>
 
@@ -261,6 +267,30 @@ const selectedTemplateId = ref('')
 const styleFilter = ref('')
 const topicFilter = ref('')
 const templateExcludeIds = ref([])
+
+const styleFilterOptions = [
+  { name: '全部', value: '' },
+  { name: '扁平简约', value: '扁平简约' },
+  { name: '商务科技', value: '商务科技' },
+  { name: '文艺清新', value: '文艺清新' },
+  { name: '卡通手绘', value: '卡通手绘' },
+  { name: '中国风', value: '中国风' },
+  { name: '创意时尚', value: '创意时尚' },
+  { name: '创意趣味', value: '创意趣味' },
+]
+
+const topicFilterOptions = [
+  { name: '全部', value: '' },
+  { name: '年终总结', value: '年终总结' },
+  { name: '教育培训', value: '教育培训' },
+  { name: '医学医疗', value: '医学医疗' },
+  { name: '商业计划书', value: '商业计划书' },
+  { name: '企业介绍', value: '企业介绍' },
+  { name: '毕业答辩', value: '毕业答辩' },
+  { name: '营销推广', value: '营销推广' },
+  { name: '晚会表彰', value: '晚会表彰' },
+  { name: '个人简历', value: '个人简历' },
+]
 
 const TEMPLATE_VIEW_PAGE_SIZE = 20
 const templateViewPage = ref(1)
@@ -674,6 +704,8 @@ async function loadTemplates({ append }) {
       page: 1,
       size: pageSize,
       filters: { type: 1 },
+      category: topicFilter.value || null,
+      style: styleFilter.value || null,
       neqId,
     })
 
@@ -702,7 +734,8 @@ async function loadTemplates({ append }) {
       return
     }
 
-    if (!selectedTemplateId.value) {
+    const hasSelected = templates.value.some(item => String(item.id) === selectedTemplateId.value)
+    if (!selectedTemplateId.value || !hasSelected) {
       selectedTemplateId.value = String(templates.value[0].id)
     }
 
@@ -735,24 +768,77 @@ function selectTemplate(template) {
   Message.success('模板已选择，现在可以进入第 3 步')
 }
 
-function onStyleFilterChange() {
+async function onStyleFilterChange() {
   templateViewPage.value = 1
-  // 预留：后续可在这里接入更细颗粒的风格筛选逻辑
+  await loadTemplates({ append: false })
 }
 
-function onTopicFilterChange() {
+async function onTopicFilterChange() {
   templateViewPage.value = 1
-  // 预留：后续可在这里接入按主题匹配的筛选逻辑
+  await loadTemplates({ append: false })
 }
 
-function applyStyleFilterPlaceholder(list) {
-  // 预留函数占位：当前先返回原始列表，后续你可以在此实现 style 过滤规则
-  return list
+function normalizeFilterText(value) {
+  return String(value || '').trim().replace(/\s+/g, '')
 }
 
-function applyTopicFilterPlaceholder(list) {
-  // 预留函数占位：当前先返回原始列表，后续你可以在此实现 topic 过滤规则
-  return list
+function flattenTemplateFieldValue(value) {
+  if (value == null) return []
+  if (Array.isArray(value)) {
+    return value.flatMap(item => flattenTemplateFieldValue(item))
+  }
+  if (typeof value === 'object') {
+    return Object.values(value).flatMap(item => flattenTemplateFieldValue(item))
+  }
+  return [String(value)]
+}
+
+function matchesTemplateFilter(template, expectedValue, primaryKeys = []) {
+  const expected = normalizeFilterText(expectedValue)
+  if (!expected) return true
+
+  const candidates = []
+  for (const key of primaryKeys) {
+    candidates.push(...flattenTemplateFieldValue(template?.[key]))
+  }
+  candidates.push(...flattenTemplateFieldValue(template?.tags))
+  candidates.push(...flattenTemplateFieldValue(template?.label))
+  candidates.push(...flattenTemplateFieldValue(template?.labels))
+
+  const normalizedCandidates = candidates
+    .map(item => normalizeFilterText(item))
+    .filter(Boolean)
+  if (!normalizedCandidates.length) {
+    // 上游已按条件筛过时，模板对象可能不回传 style/category 字段，此时不做本地拦截。
+    return true
+  }
+
+  return normalizedCandidates.some((normalized) => {
+    if (normalized === expected) return true
+    return normalized.includes(expected)
+  })
+}
+
+function applyStyleFilterPlaceholder(list, styleValue) {
+  return list.filter(item => matchesTemplateFilter(item, styleValue, [
+    'style',
+    'styleName',
+    'style_name',
+    'templateStyle',
+    'template_style',
+  ]))
+}
+
+function applyTopicFilterPlaceholder(list, topicValue) {
+  return list.filter(item => matchesTemplateFilter(item, topicValue, [
+    'category',
+    'categoryName',
+    'category_name',
+    'theme',
+    'topic',
+    'subject',
+    'scene',
+  ]))
 }
 
 function getTemplateCoverUrl(template) {

@@ -12,8 +12,10 @@ import time
 import logging
 import os
 import json
+import threading
 from pathlib import Path
 from urllib.parse import urlparse
+from queue import Empty, Queue
 from typing import Optional, Callable, Tuple, List, TYPE_CHECKING, Any, Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError as FuturesTimeoutError
 
@@ -1067,19 +1069,101 @@ def research_citations_via_api(
     # Translate non-English queries to English for academic databases
     research_topics = _ensure_english_queries(research_topics, model, verbose)
 
-    # Execution Phase: Run queries through API fallback chain
-    if verbose:
-        safe_print(f"\n📊 Execution Configuration:")
-        safe_print(f"   Target Minimum: {target_minimum} citations")
-        safe_print(f"   Research Topics/Queries: {len(research_topics)}")
-        if output_path:
-            safe_print(f"   Output: {output_path}")
-        safe_print()
+    # Normalize + de-duplicate topics to avoid wasting budget on duplicates.
+    normalized_topics: List[str] = []
+    seen_topics = set()
+    for raw_topic in research_topics or []:
+        safe_topic = str(raw_topic or '').strip()
+        if not safe_topic or safe_topic in seen_topics:
+            continue
+        seen_topics.add(safe_topic)
+        normalized_topics.append(safe_topic)
+    research_topics = normalized_topics
 
-    # Initialize CitationResearcher with API fallback chain
-    # Semantic Scholar can be disabled via env var if rate limited (403 errors)
+    # Initialize CitationResearcher with API fallback chain.
     enable_semantic_scholar = os.environ.get('ENABLE_SEMANTIC_SCHOLAR', 'true').lower() != 'false'
     enable_gemini_grounded = os.environ.get('ENABLE_GEMINI_GROUNDED', 'true').lower() != 'false'
+    crossref_only_mode = not enable_semantic_scholar and not enable_gemini_grounded
+
+    # Detect if proxies are configured for rate limit bypass.
+    from utils.api_citations.base import PROXY_LIST
+    use_proxies = len(PROXY_LIST) > 0
+
+    # Crossref-only mode can become very slow due to 429 backoff loops.
+    # Auto-throttle concurrency and query volume to reduce wasted retries.
+    if crossref_only_mode:
+        max_queries_crossref_only = min(max(int(target_minimum * 1.6), 20), 60)
+        if len(research_topics) > max_queries_crossref_only:
+            dropped = len(research_topics) - max_queries_crossref_only
+            logger.info(
+                "Crossref-only mode: shrinking query count from %s to %s (dropped %s)",
+                len(research_topics),
+                max_queries_crossref_only,
+                dropped,
+            )
+            research_topics = research_topics[:max_queries_crossref_only]
+
+    def _emit_progress(message: str, event_type: str = 'info') -> None:
+        # Heartbeat is useful for backend diagnostics but too noisy for frontend UX.
+        # Keep it in server logs and stop forwarding to UI progress callback.
+        if isinstance(message, str) and message.startswith("Scout heartbeat:"):
+            logger.debug(message)
+            return
+        if progress_callback:
+            try:
+                progress_callback(message, event_type)
+            except Exception as progress_error:
+                logger.debug(f"Progress callback failed: {progress_error}")
+
+    # Parallel citation research configuration.
+    # IMPORTANT: In Crossref-only mode we avoid get_concurrency_config() because it may
+    # trigger Gemini tier probing, which adds long startup latency unrelated to Crossref.
+    if crossref_only_mode:
+        batch_size = max(1, int(os.getenv("SCOUT_BATCH_SIZE", "10")))
+        batch_delay = float(os.getenv("SCOUT_BATCH_DELAY", "1.0"))
+        parallel_workers = max(1, int(os.getenv("SCOUT_PARALLEL_WORKERS", "4")))
+        logger.info(
+            "Crossref-only mode: using direct SCOUT_* env config (skip API tier probe): "
+            "batch_size=%s, batch_delay=%s, workers=%s",
+            batch_size,
+            batch_delay,
+            parallel_workers,
+        )
+    else:
+        config = get_concurrency_config(verbose=False)
+        batch_size = max(1, int(config.scout_batch_size))
+        batch_delay = float(config.scout_batch_delay)
+        parallel_workers = max(1, int(config.scout_parallel_workers))
+    effective_batch_delay = 0 if use_proxies else max(0.0, batch_delay)
+    effective_batch_size = batch_size
+    effective_parallel_workers = parallel_workers
+    effective_topic_timeout = max(6, int(per_topic_timeout_seconds))
+
+    crossref_rate_limit_per_second: Optional[float] = None
+    crossref_timeout: Optional[int] = None
+    crossref_max_retries: Optional[int] = None
+
+    if crossref_only_mode:
+        # Apply conservative settings when only Crossref is available.
+        effective_parallel_workers = 1
+        effective_batch_size = min(effective_batch_size, 4)
+        if not use_proxies:
+            effective_batch_delay = max(effective_batch_delay, 1.0)
+        effective_topic_timeout = max(6, min(effective_topic_timeout, 12))
+        crossref_rate_limit_per_second = 1.5
+        crossref_timeout = 8
+        crossref_max_retries = 2
+        logger.info(
+            "Crossref-only auto-throttle enabled: workers=%s, batch_size=%s, timeout=%ss, retries=%s",
+            effective_parallel_workers,
+            effective_batch_size,
+            effective_topic_timeout,
+            crossref_max_retries,
+        )
+        _emit_progress(
+            f"Crossref-only mode detected. Auto-throttle enabled (workers={effective_parallel_workers}, batch={effective_batch_size}, timeout={effective_topic_timeout}s).",
+            "info",
+        )
 
     researcher = CitationResearcher(
         gemini_model=model,
@@ -1090,89 +1174,124 @@ def research_citations_via_api(
         enable_llm_fallback=False,     # DISABLED: LLM hallucinates citations
         verbose=verbose,
         progress_callback=progress_callback,  # Pass through for progress reporting
+        crossref_rate_limit_per_second=crossref_rate_limit_per_second,
+        crossref_timeout=crossref_timeout,
+        crossref_max_retries=crossref_max_retries,
     )
+
+    # Execution Phase: Run queries through API fallback chain.
+    if verbose:
+        safe_print(f"\n📊 Execution Configuration:")
+        safe_print(f"   Target Minimum: {target_minimum} citations")
+        safe_print(f"   Research Topics/Queries: {len(research_topics)}")
+        safe_print(f"   Workers: {effective_parallel_workers}")
+        safe_print(f"   Topic Timeout: {effective_topic_timeout}s")
+        if output_path:
+            safe_print(f"   Output: {output_path}")
+        safe_print()
 
     if not enable_semantic_scholar and verbose:
         safe_print("   ⚠️  Semantic Scholar disabled (ENABLE_SEMANTIC_SCHOLAR=false)")
     if not enable_gemini_grounded and verbose:
         safe_print("   ⚠️  Gemini Grounded disabled (ENABLE_GEMINI_GROUNDED=false)")
+    if verbose and use_proxies:
+        safe_print(f"\n🔀 Proxy rotation enabled: {len(PROXY_LIST)} proxies")
+        safe_print("   Batch delays disabled for maximum throughput")
 
-    # Track results
+    # Track results.
     citations: List[Citation] = []
     sources_breakdown: Dict[str, int] = {
         "Crossref": 0,
         "Semantic Scholar": 0,
         "Gemini Grounded": 0,
-        "Gemini LLM": 0
+        "Gemini LLM": 0,
     }
     failed_topics: List[str] = []
 
-    # Parallel citation research configuration (tier-adaptive)
-    config = get_concurrency_config(verbose=False)
-    BATCH_SIZE = config.scout_batch_size
-    BATCH_DELAY = config.scout_batch_delay
-    PARALLEL_WORKERS = config.scout_parallel_workers
+    def _run_topic_with_hard_timeout(research_topic: str) -> Tuple[List[Citation], Optional[str]]:
+        """
+        Run topic research in a daemon thread and return without blocking past timeout.
+        """
+        result_queue: Queue = Queue(maxsize=1)
 
-    # Detect if proxies are configured for rate limit bypass
-    from utils.api_citations.base import PROXY_LIST
-    use_proxies = len(PROXY_LIST) > 0
-
-    # Adjust batch delay based on proxy availability
-    # With proxies: skip delays for maximum throughput
-    # Without proxies: respect API rate limits
-    effective_batch_delay = 0 if use_proxies else BATCH_DELAY
-
-    if verbose and use_proxies:
-        safe_print(f"\n🔀 Proxy rotation enabled: {len(PROXY_LIST)} proxies")
-        safe_print(f"   Batch delays disabled for maximum throughput")
-
-    # Helper function for parallel execution with timeout
-    def _research_single_topic(topic_with_idx: Tuple[int, str]) -> Tuple[int, str, List[Citation], Optional[str]]:
-        """Research a single topic with timeout. Returns (idx, topic, list_of_citations, error_or_None)."""
-        idx, research_topic = topic_with_idx
-        try:
-            # Wrap in executor for timeout control
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(researcher.research_citation, research_topic)
+        def _worker() -> None:
+            try:
+                citations_list = researcher.research_citation(research_topic)
+                result_queue.put((citations_list, None), block=False)
+            except Exception as worker_error:
                 try:
-                    citations_list = future.result(timeout=per_topic_timeout_seconds)
-                    return (idx, research_topic, citations_list, None)
-                except FuturesTimeoutError:
-                    return (idx, research_topic, [], f"Timeout after {per_topic_timeout_seconds}s")
-        except Exception as e:
-            return (idx, research_topic, [], str(e))
+                    result_queue.put(([], str(worker_error)), block=False)
+                except Exception:
+                    pass
 
-    # Early stopping: use user's target + 30% buffer (to account for dedup/filtering losses)
+        worker = threading.Thread(
+            target=_worker,
+            daemon=True,
+            name=f"citation-topic-{int(time.time() * 1000)}",
+        )
+        worker.start()
+        worker.join(effective_topic_timeout)
+        if worker.is_alive():
+            return ([], f"Timeout after {effective_topic_timeout}s")
+
+        try:
+            citations_list, maybe_error = result_queue.get_nowait()
+            return (citations_list, maybe_error)
+        except Empty:
+            return ([], "Topic worker finished without a result")
+
+    # Helper function for parallel execution with hard timeout.
+    def _research_single_topic(topic_with_idx: Tuple[int, str]) -> Tuple[int, str, List[Citation], Optional[str]]:
+        idx, research_topic = topic_with_idx
+        citations_list, error = _run_topic_with_hard_timeout(research_topic)
+        return (idx, research_topic, citations_list, error)
+
+    # Early stopping: use user's target + 30% buffer (to account for dedup/filtering losses).
     early_stop_threshold = max(int(target_minimum * 1.3), 15)
 
-    # Parallel or sequential based on config
-    if PARALLEL_WORKERS > 1:
+    total_topics = len(research_topics)
+    processed = 0
+    _emit_progress(
+        f"Scout execution started: {total_topics} topics, workers={effective_parallel_workers}, timeout={effective_topic_timeout}s.",
+        "info",
+    )
+
+    # Parallel or sequential based on effective worker count.
+    if effective_parallel_workers > 1:
         if verbose:
-            safe_print(f"\n🚀 Parallel citation research enabled ({PARALLEL_WORKERS} workers)")
+            safe_print(f"\n🚀 Parallel citation research enabled ({effective_parallel_workers} workers)")
 
-        # Process in batches with parallel workers
-        total_topics = len(research_topics)
-        processed = 0
-
-        for batch_start in range(0, total_topics, BATCH_SIZE):
-            # Early stopping: Check if we've reached target + 10%
+        total_batches = (total_topics + effective_batch_size - 1) // effective_batch_size
+        for batch_start in range(0, total_topics, effective_batch_size):
             if len(citations) >= early_stop_threshold:
                 if verbose:
-                    safe_print(f"\n⏩ Early stopping: {len(citations)} citations collected (target: {target_minimum}, threshold: {early_stop_threshold})")
+                    safe_print(
+                        f"\n⏩ Early stopping: {len(citations)} citations collected "
+                        f"(target: {target_minimum}, threshold: {early_stop_threshold})"
+                    )
                 break
 
-            batch_end = min(batch_start + BATCH_SIZE, total_topics)
+            batch_end = min(batch_start + effective_batch_size, total_topics)
             batch = list(enumerate(research_topics[batch_start:batch_end], batch_start + 1))
+            batch_num = batch_start // effective_batch_size + 1
 
-            if verbose and batch_start > 0 and effective_batch_delay > 0:
-                safe_print(f"\n⏸️  Batch complete ({batch_start} topics processed). Waiting {effective_batch_delay}s to respect API limits...")
+            if batch_start > 0 and effective_batch_delay > 0:
+                if verbose:
+                    safe_print(
+                        f"\n⏸️  Batch complete ({batch_start} topics processed). "
+                        f"Waiting {effective_batch_delay}s to respect API limits..."
+                    )
                 time.sleep(effective_batch_delay)
 
+            _emit_progress(
+                f"Scout heartbeat: batch {batch_num}/{total_batches}, processed {processed}/{total_topics}, "
+                f"citations {len(citations)}, failed {len(failed_topics)}.",
+                "info",
+            )
             if verbose:
-                safe_print(f"\n📦 Processing batch {batch_start // BATCH_SIZE + 1} ({len(batch)} topics)...")
+                safe_print(f"\n📦 Processing batch {batch_num} ({len(batch)} topics)...")
 
-            # Execute batch in parallel
-            with ThreadPoolExecutor(max_workers=PARALLEL_WORKERS) as executor:
+            with ThreadPoolExecutor(max_workers=effective_parallel_workers) as executor:
                 futures = {executor.submit(_research_single_topic, item): item for item in batch}
 
                 for future in as_completed(futures):
@@ -1180,124 +1299,107 @@ def research_citations_via_api(
                     processed += 1
 
                     if verbose:
-                        safe_print(f"[{idx}/{total_topics}] 🔎 {research_topic[:55]}{'...' if len(research_topic) > 55 else ''}", end=' ')
+                        safe_print(
+                            f"[{idx}/{total_topics}] 🔎 {research_topic[:55]}{'...' if len(research_topic) > 55 else ''}",
+                            end=' ',
+                        )
 
                     if error:
                         failed_topics.append(research_topic)
+                        if 'Timeout after' in error:
+                            logger.warning(f"Citation research timed out for '{research_topic}': {error}")
+                        else:
+                            logger.error(f"Citation research failed for '{research_topic}': {error}")
                         if verbose:
-                            safe_print(f"❌ Error: {error[:30]}...")
-                        logger.error(f"Citation research failed for '{research_topic}': {error}")
+                            safe_print(f"❌ {error[:42]}...")
                     elif citations_list:
-                        # Add ALL citations from this query (multiple sources)
                         citations.extend(citations_list)
-                        # Update source breakdown for all citations
                         for citation in citations_list:
                             source = citation.api_source or 'Unknown'
                             if source in sources_breakdown:
                                 sources_breakdown[source] += 1
                         if verbose:
-                            # Show all sources found for this query
                             sources_str = ", ".join([c.api_source or 'Unknown' for c in citations_list])
                             first_citation = citations_list[0]
                             authors_str = first_citation.authors[0] if first_citation.authors else "Unknown"
                             count_str = f" (+{len(citations_list)-1} more)" if len(citations_list) > 1 else ""
                             safe_print(f"✅ {authors_str} et al. ({first_citation.year}) [{sources_str}]{count_str}")
-
-                        # Check for early stopping within batch
-                        if len(citations) >= early_stop_threshold:
-                            if verbose:
-                                safe_print(f"\n⏩ Early stopping: {len(citations)} citations collected")
-                            break
                     else:
                         failed_topics.append(research_topic)
                         if verbose:
                             safe_print("❌ No citation found")
+
+                    _emit_progress(
+                        f"Scout heartbeat: processed {processed}/{total_topics}, citations {len(citations)}, "
+                        f"failed {len(failed_topics)}.",
+                        "info",
+                    )
+
+                    if len(citations) >= early_stop_threshold:
+                        if verbose:
+                            safe_print(f"\n⏩ Early stopping: {len(citations)} citations collected")
+                        break
     else:
-        # Sequential execution (free tier or 1 worker)
         if verbose:
             safe_print("\n🔄 Sequential citation research (1 worker)")
 
         for idx, research_topic in enumerate(research_topics, 1):
-            # Early stopping: Check if we've reached target + 10%
             if len(citations) >= early_stop_threshold:
                 if verbose:
-                    safe_print(f"\n⏩ Early stopping: {len(citations)} citations collected (target: {target_minimum}, threshold: {early_stop_threshold})")
+                    safe_print(
+                        f"\n⏩ Early stopping: {len(citations)} citations collected "
+                        f"(target: {target_minimum}, threshold: {early_stop_threshold})"
+                    )
                 break
 
-            # Add delay every BATCH_SIZE topics to prevent burst rate limits
-            if idx > 1 and (idx - 1) % BATCH_SIZE == 0 and effective_batch_delay > 0:
+            if idx > 1 and (idx - 1) % effective_batch_size == 0 and effective_batch_delay > 0:
                 if verbose:
-                    safe_print(f"\n⏸️  Batch complete ({idx-1} topics processed). Waiting {effective_batch_delay}s to respect API limits...")
+                    safe_print(
+                        f"\n⏸️  Batch complete ({idx - 1} topics processed). "
+                        f"Waiting {effective_batch_delay}s to respect API limits..."
+                    )
                 time.sleep(effective_batch_delay)
 
+            _emit_progress(
+                f"Scout heartbeat: starting topic {idx}/{total_topics}, citations {len(citations)}, failed {len(failed_topics)}.",
+                "info",
+            )
             if verbose:
-                safe_print(f"[{idx}/{len(research_topics)}] 🔎 {research_topic[:65]}{'...' if len(research_topic) > 65 else ''}")
+                safe_print(f"[{idx}/{total_topics}] 🔎 {research_topic[:65]}{'...' if len(research_topic) > 65 else ''}")
 
-            try:
-                # Wrap in executor for timeout control
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(researcher.research_citation, research_topic)
-                    try:
-                        citations_list = future.result(timeout=per_topic_timeout_seconds)
-                    except FuturesTimeoutError:
-                        citations_list = []
-                        failed_topics.append(research_topic)
-                        if verbose:
-                            safe_print(f"    ⏱️  Timeout after {per_topic_timeout_seconds}s")
-                        logger.warning(f"Citation research timed out for '{research_topic}' after {per_topic_timeout_seconds}s")
-                        continue
+            citations_list, error = _run_topic_with_hard_timeout(research_topic)
 
-                if citations_list:
-                    # #region agent log
-                    # Note: json, time, os already imported at module level
-                    try:
-                        debug_log_path = os.getenv('DEBUG_LOG_PATH', '/tmp/opendraft/debug.log')
-                        os.makedirs(os.path.dirname(debug_log_path), exist_ok=True)
-                        with open(debug_log_path, 'a') as f:
-                            f.write(json.dumps({
-                                "sessionId": "debug-session",
-                                "runId": "run1",
-                                "hypothesisId": "J",
-                                "location": "agent_runner.py:710",
-                                "message": "Citations found for topic",
-                                "data": {
-                                    "topic": research_topic[:100],
-                                    "citations_count": len(citations_list),
-                                    "sources": [c.api_source or 'Unknown' for c in citations_list],
-                                    "total_citations_so_far": len(citations) + len(citations_list)
-                                },
-                                "timestamp": int(time.time() * 1000)
-                            }) + "\n")
-                    except Exception as e:
-                        logger.debug(f"Debug log write failed: {e}")
-                    # #endregion
-                    
-                    # Add ALL citations from this query (multiple sources)
-                    citations.extend(citations_list)
-
-                    # Track sources for all citations
-                    for citation in citations_list:
-                        source = citation.api_source or 'Unknown'
-                        if source in sources_breakdown:
-                            sources_breakdown[source] += 1
-
-                    if verbose:
-                        # Show all sources found for this query
-                        sources_str = ", ".join([c.api_source or 'Unknown' for c in citations_list])
-                        first_citation = citations_list[0]
-                        authors_str = first_citation.authors[0] if first_citation.authors else "Unknown"
-                        count_str = f" (+{len(citations_list)-1} more)" if len(citations_list) > 1 else ""
-                        safe_print(f"    ✅ {authors_str} et al. ({first_citation.year}) [{sources_str}]{count_str}")
+            if error:
+                failed_topics.append(research_topic)
+                if 'Timeout after' in error:
+                    logger.warning(f"Citation research timed out for '{research_topic}': {error}")
                 else:
-                    failed_topics.append(research_topic)
-                    if verbose:
-                        safe_print(f"    ❌ No citation found")
+                    logger.error(f"Citation research failed for '{research_topic}': {error}")
+                if verbose:
+                    safe_print(f"    ❌ {error}")
+                continue
 
-            except Exception as e:
+            if citations_list:
+                citations.extend(citations_list)
+                for citation in citations_list:
+                    source = citation.api_source or 'Unknown'
+                    if source in sources_breakdown:
+                        sources_breakdown[source] += 1
+                if verbose:
+                    sources_str = ", ".join([c.api_source or 'Unknown' for c in citations_list])
+                    first_citation = citations_list[0]
+                    authors_str = first_citation.authors[0] if first_citation.authors else "Unknown"
+                    count_str = f" (+{len(citations_list)-1} more)" if len(citations_list) > 1 else ""
+                    safe_print(f"    ✅ {authors_str} et al. ({first_citation.year}) [{sources_str}]{count_str}")
+            else:
                 failed_topics.append(research_topic)
                 if verbose:
-                    safe_print(f"    ❌ Error: {str(e)}")
-                logger.error(f"Citation research failed for '{research_topic}': {str(e)}")
+                    safe_print("    ❌ No citation found")
+
+            _emit_progress(
+                f"Scout heartbeat: completed topic {idx}/{total_topics}, citations {len(citations)}, failed {len(failed_topics)}.",
+                "info",
+            )
 
     # Calculate success metrics
     citation_count = len(citations)
@@ -1447,14 +1549,15 @@ def research_citations_via_api(
         for failed_topic in failed_topics:
             markdown_lines.append(f"- {failed_topic}")
 
-    # Write to file
+    # Write to file when output path is provided
     markdown_content = "\n".join(markdown_lines)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(markdown_content, encoding='utf-8')
+    if output_path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(markdown_content, encoding='utf-8')
 
-    if verbose:
-        safe_print(f"💾 Saved Scout output to: {output_path}")
-        safe_print(f"   File size: {output_path.stat().st_size:,} bytes\n")
+        if verbose:
+            safe_print(f"💾 Saved Scout output to: {output_path}")
+            safe_print(f"   File size: {output_path.stat().st_size:,} bytes\n")
 
     logger.info(f"Scout completed: {citation_count} citations, {success_rate:.1f}% success rate")
 

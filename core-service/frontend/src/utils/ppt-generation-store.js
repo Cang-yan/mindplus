@@ -134,10 +134,10 @@ function scheduleRemoteUpsert(record) {
   remoteUpsertTimers.set(key, timer)
 }
 
-function scheduleRemoteDelete(recordId) {
+async function deleteRemoteHistory(recordId) {
   const safeRecordId = String(recordId || '').trim()
   if (!safeRecordId || !hasJwtToken()) {
-    return
+    return { deleted: true, recordId: safeRecordId }
   }
 
   const existingTimer = remoteUpsertTimers.get(safeRecordId)
@@ -147,9 +147,11 @@ function scheduleRemoteDelete(recordId) {
   }
   pendingRemoteRecords.delete(safeRecordId)
 
-  void deleteAipptHistory(safeRecordId).catch((error) => {
-    console.warn('aippt history delete failed:', error)
-  })
+  const remoteResult = await deleteAipptHistory(safeRecordId)
+  if (remoteResult?.deleted === false) {
+    throw new Error(`aippt history delete returned deleted=false: ${safeRecordId}`)
+  }
+  return remoteResult
 }
 
 async function migrateLocalHistoryToRemoteOnce() {
@@ -209,7 +211,7 @@ export async function ensurePptGenerationRecord(recordId) {
   }
 }
 
-export function deletePptGenerationRecord(id, options = {}) {
+export async function deletePptGenerationRecord(id, options = {}) {
   if (!id) {
     return false
   }
@@ -221,7 +223,13 @@ export function deletePptGenerationRecord(id, options = {}) {
   }
   writeRawRecords(next)
   if (options.syncRemote !== false) {
-    scheduleRemoteDelete(sid)
+    try {
+      await deleteRemoteHistory(sid)
+    } catch (error) {
+      // Keep local and remote state consistent when remote delete fails.
+      writeRawRecords(records)
+      throw error
+    }
   }
   return true
 }
